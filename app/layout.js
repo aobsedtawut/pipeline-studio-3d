@@ -1,4 +1,5 @@
 import "./globals.css";
+import AuthProvider from "./components/AuthProvider";
 
 export const metadata = {
   title: "Pipeline Studio",
@@ -21,7 +22,9 @@ export default function RootLayout({ children }) {
             by VideoStage.js/Hero3D.js (window.THREE), not decorative. */}
         <script src="https://unpkg.com/three@0.160.0/build/three.min.js" defer></script>
       </head>
-      <body>{children}</body>
+      <body>
+        <AuthProvider>{children}</AuthProvider>
+      </body>
     </html>
   );
 }

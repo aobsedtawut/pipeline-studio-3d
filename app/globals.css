@@ -142,6 +142,47 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text
 h1.title { margin-top: 18px; font-size: clamp(30px, 5vw, 46px); line-height: 1.06; letter-spacing: -0.01em; }
 .dek { margin-top: 14px; max-width: 62ch; color: var(--ink-soft); font-size: 16px; font-weight: 500; }
 
+/* ---------- App shell (sidebar + topbar) ---------- */
+.app-shell { display: flex; min-height: 100vh; }
+.main-content { flex: 1; min-width: 0; }
+
+.sidebar {
+  width: 148px; flex-shrink: 0;
+  background: var(--surface); border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; align-items: center;
+  padding: 20px 12px; gap: 18px;
+  position: sticky; top: 0; height: 100vh; overflow-y: auto;
+}
+.sidebar-brand { font-size: 22px; }
+.sidebar-nav { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.sidebar-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border: 2px solid transparent; border-radius: 14px; padding: 8px 4px;
+  cursor: pointer; width: 100%;
+}
+.sidebar-item-label {
+  font-size: 10.5px; font-weight: 700; color: var(--ink-soft);
+  text-align: center; line-height: 1.2;
+}
+
+.topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 60px; padding: 0 24px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 10;
+}
+.topbar-title { font-family: var(--font-display); font-weight: 700; font-size: 15px; color: var(--ink); }
+.topbar-actions { display: flex; align-items: center; gap: 12px; }
+.topbar-user { display: flex; align-items: center; gap: 8px; }
+.topbar-avatar { width: 26px; height: 26px; border-radius: 999px; }
+.topbar-email { font-size: 12.5px; color: var(--ink-faint); }
+
+@media (max-width: 720px) {
+  .sidebar { width: 60px; padding: 16px 6px; }
+  .sidebar-item-label { display: none; }
+  .topbar-email { display: none; }
+}
+
 /* ---------- Stage cards ---------- */
 .stage {
   background: var(--surface);

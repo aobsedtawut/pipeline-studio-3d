@@ -4,8 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { motion } from "motion/react";
 import Hero3D from "./components/Hero3D";
 import PipelineHUD from "./components/PipelineHUD";
-import HistoryDrawer from "./components/HistoryDrawer";
-import StageCharacter from "./components/StageCharacter";
+import Sidebar from "./components/Sidebar";
+import Topbar from "./components/Topbar";
 import ProductStage from "./components/ProductStage";
 import ScriptStage from "./components/ScriptStage";
 import TtsStage from "./components/TtsStage";
@@ -106,51 +106,29 @@ export default function Page() {
   }
 
   return (
-    <div>
-      <header className="hero">
-        <Hero3D />
-        <div className="wrap hero-inner">
-          <span className="eyebrow">🚀 Pipeline Studio — All-in-one, client-rendered</span>
-          <h1 className="title">สคริปต์ → เสียง → วิดีโอ 3D → Export → โพสต์ ในหน้าเดียว</h1>
-          <p className="dek">
-            ทุกขั้นตอนของ affiliate content pipeline รวมในหน้าเดียว วิดีโอเรนเดอร์ในเบราว์เซอร์คุณเอง
-            (ไม่ติด serverless time limit) ด้วยเทมเพลต 3D ที่สร้างจาก Three.js
-          </p>
-          <div className="flex items-start justify-between gap-4 flex-wrap mt-6">
-            <div className="flex gap-2.5 flex-wrap">
-              {STAGE_META.map((s, i) => {
-                const state = i < stageIndex ? "done" : i === stageIndex ? "active" : "pending";
-                return (
-                  <motion.button
-                    key={s.key}
-                    type="button"
-                    onClick={() => scrollToStage(s.key)}
-                    whileHover={{ y: -3 }}
-                    whileTap={{ scale: 0.94 }}
-                    className="flex flex-col items-center gap-1 rounded-2xl border-2 px-3 py-2.5 transition-colors"
-                    style={{
-                      color: `var(${s.accent})`,
-                      borderColor: state === "done" ? "var(--ok)" : state === "active" ? `var(${s.accent})` : "var(--border)",
-                      background: state === "active" ? `color-mix(in srgb, var(${s.accent}) 14%, var(--surface))` : "var(--surface)",
-                      opacity: state === "pending" ? 0.6 : 1,
-                    }}
-                  >
-                    <StageCharacter kind={s.key} size={30} />
-                    <span className="text-[10.5px] font-bold text-[var(--ink-soft)] whitespace-nowrap">{s.label}</span>
-                  </motion.button>
-                );
-              })}
-            </div>
-            <HistoryDrawer onLoad={resumeRun} />
-          </div>
-          <div className="mt-5">
-            <PipelineHUD scenes={scenes} stageIndex={stageIndex} totalStages={STAGE_LABELS.length} />
-          </div>
-        </div>
-      </header>
+    <div className="app-shell">
+      <Sidebar stageMeta={STAGE_META} stageIndex={stageIndex} onNavigate={scrollToStage} />
 
-      <motion.div className="wrap" variants={stageListVariants} initial="hidden" animate="show">
-        <div ref={stageRefs.product}>
+      <div className="main-content">
+        <Topbar onLoadRun={resumeRun} />
+
+        <header className="hero">
+          <Hero3D />
+          <div className="wrap hero-inner">
+            <span className="eyebrow">🚀 Pipeline Studio — All-in-one, client-rendered</span>
+            <h1 className="title">สคริปต์ → เสียง → วิดีโอ 3D → Export → โพสต์ ในหน้าเดียว</h1>
+            <p className="dek">
+              ทุกขั้นตอนของ affiliate content pipeline รวมในหน้าเดียว วิดีโอเรนเดอร์ในเบราว์เซอร์คุณเอง
+              (ไม่ติด serverless time limit) ด้วยเทมเพลต 3D ที่สร้างจาก Three.js
+            </p>
+            <div className="mt-5">
+              <PipelineHUD scenes={scenes} stageIndex={stageIndex} totalStages={STAGE_LABELS.length} />
+            </div>
+          </div>
+        </header>
+
+        <motion.div className="wrap" variants={stageListVariants} initial="hidden" animate="show">
+          <div ref={stageRefs.product}>
           <ProductStage
             unlocked={true}
             meta={meta}
@@ -216,7 +194,8 @@ export default function Page() {
           Pipeline Studio · เรนเดอร์ทุกอย่างในเบราว์เซอร์ ยกเว้นสคริปต์ AI-assist / TTS / โพสต์ Facebook ที่ผ่าน
           serverless routes
         </footer>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }
