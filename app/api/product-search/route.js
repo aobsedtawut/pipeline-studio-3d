@@ -52,6 +52,7 @@ const SORT_KEYS = {
   commission: (n) => Number(n.commissionRate || 0),
   sales: (n) => Number(n.sales || 0),
   price: (n) => Number(n.price || 0),
+  rating: (n) => Number(n.ratingStar || 0),
 };
 
 export async function POST(request) {
@@ -77,7 +78,7 @@ export async function POST(request) {
   }
   const sortKey = SORT_KEYS[sortBy];
   if (!sortKey) {
-    return Response.json({ error: `sortBy ต้องเป็น commission, sales, หรือ price (ได้ ${sortBy})` }, { status: 400 });
+    return Response.json({ error: `sortBy ต้องเป็น commission, sales, price, หรือ rating (ได้ ${sortBy})` }, { status: 400 });
   }
 
   const fetchLimit = Math.max(Number(limit) || 10, 50); // over-fetch so client-side sort is meaningful
