@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import Stage from "./Stage";
 
 export default function PostStage({ unlocked, meta, scenes, videoUrl }) {
   const [caption, setCaption] = useState(
-    `${meta.hook || ""}\n\n${meta.cta || "กดลิงก์ช้อปเลย"}\n\n#รีวิว #ของใช้ในบ้าน`
+    `${meta.hook || ""}\n\n${meta.cta || "กดลิงก์ช้อปเลย"}${meta.affiliateLink ? `\n${meta.affiliateLink}` : ""}\n\n#รีวิว #ของใช้ในบ้าน`
   );
   const [status, setStatus] = useState(null);
   const [msg, setMsg] = useState("");
@@ -45,16 +46,12 @@ export default function PostStage({ unlocked, meta, scenes, videoUrl }) {
   }
 
   return (
-    <div className={`stage ${unlocked ? "unlocked" : ""}`}>
-      <div className="stage-head">
-        <div className="stage-num">6</div>
-        <h2>โพสต์ (Post)</h2>
-      </div>
-      <div className="stage-sub">
-        โพสต์แคปชั่น + ภาพหน้าปกลง Facebook Page จริงผ่าน Graph API — ส่วนวิดีโอเต็มยังต้องดาวน์โหลดไปโพสต์เองก่อน
-        (resumable video upload ยังไม่รวมในเวอร์ชันนี้ เพราะไฟล์วิดีโอใหญ่กว่าที่ serverless function รับได้ในครั้งเดียว)
-      </div>
-
+    <Stage
+      num={7}
+      title="โพสต์ (Post)"
+      sub="โพสต์แคปชั่น + ภาพหน้าปกลง Facebook Page จริงผ่าน Graph API — ส่วนวิดีโอเต็มยังต้องดาวน์โหลดไปโพสต์เองก่อน (resumable video upload ยังไม่รวมในเวอร์ชันนี้ เพราะไฟล์วิดีโอใหญ่กว่าที่ serverless function รับได้ในครั้งเดียว)"
+      unlocked={unlocked}
+    >
       <label className="field-label">แคปชั่น</label>
       <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={5} />
 
@@ -73,6 +70,6 @@ export default function PostStage({ unlocked, meta, scenes, videoUrl }) {
         ต้องตั้งค่า FB_PAGE_ID และ FB_PAGE_ACCESS_TOKEN ใน Vercel Environment Variables ก่อน (Page ที่มีสิทธิ์
         pages_manage_posts) — Facebook Group ไม่มี API โพสต์อัตโนมัติแล้วตั้งแต่ปี 2024 ต้องโพสต์เองผ่านเบราว์เซอร์
       </div>
-    </div>
+    </Stage>
   );
 }

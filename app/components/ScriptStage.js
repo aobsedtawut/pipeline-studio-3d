@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { buildTemplateScript } from "../lib/pipeline";
+import Stage from "./Stage";
 
 export default function ScriptStage({ unlocked, scenes, setScenes, meta, setMeta, onDone, done }) {
   const [productName, setProductName] = useState(meta.productName || "");
@@ -50,13 +51,12 @@ export default function ScriptStage({ unlocked, scenes, setScenes, meta, setMeta
   }
 
   return (
-    <div className={`stage ${unlocked ? "unlocked" : ""}`}>
-      <div className="stage-head">
-        <div className="stage-num">1</div>
-        <h2>สคริปต์ (Script)</h2>
-      </div>
-      <div className="stage-sub">ใส่ชื่อสินค้า + จุดเด่น แล้วสร้างสคริปต์เป็นฉากๆ พร้อมแก้ไขได้ก่อนพากย์เสียง</div>
-
+    <Stage
+      num={2}
+      title="สคริปต์ (Script)"
+      sub="ใส่ชื่อสินค้า + จุดเด่น แล้วสร้างสคริปต์เป็นฉากๆ พร้อมแก้ไขได้ก่อนพากย์เสียง"
+      unlocked={unlocked}
+    >
       <label className="field-label">ชื่อสินค้า</label>
       <input type="text" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="เช่น Botare ทิชชู่แขวนผนัง" />
 
@@ -105,6 +105,6 @@ export default function ScriptStage({ unlocked, scenes, setScenes, meta, setMeta
         </div>
       )}
       {done && <div className="status-pill ok" style={{ marginTop: 14 }}>✓ สคริปต์พร้อมแล้ว ({scenes.length} ฉาก)</div>}
-    </div>
+    </Stage>
   );
 }

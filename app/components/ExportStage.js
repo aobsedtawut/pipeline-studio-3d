@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Stage from "./Stage";
 
 // Current (approximate) organic sweet spots — verify against each platform's
 // live guidance before treating these as authoritative; they change.
@@ -27,13 +28,12 @@ export default function ExportStage({ unlocked, videoBlob, videoUrl, duration, o
   const allDownloaded = SPECS.every((s) => downloaded[s.key]);
 
   return (
-    <div className={`stage ${unlocked ? "unlocked" : ""}`}>
-      <div className="stage-head">
-        <div className="stage-num">5</div>
-        <h2>Export</h2>
-      </div>
-      <div className="stage-sub">ตรวจความยาวเทียบแต่ละแพลตฟอร์ม แล้วดาวน์โหลดไฟล์สำหรับโพสต์</div>
-
+    <Stage
+      num={6}
+      title="Export"
+      sub="ตรวจความยาวเทียบแต่ละแพลตฟอร์ม แล้วดาวน์โหลดไฟล์สำหรับโพสต์"
+      unlocked={unlocked}
+    >
       {duration && (
         <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 4 }}>
           {SPECS.map((s) => {
@@ -76,6 +76,6 @@ export default function ExportStage({ unlocked, videoBlob, videoUrl, duration, o
         </div>
       )}
       {done && <div className="status-pill ok" style={{ marginTop: 14 }}>✓ Export พร้อมแล้ว</div>}
-    </div>
+    </Stage>
   );
 }

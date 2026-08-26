@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { SCENE_TEMPLATES, ZOOM_FROM, ZOOM_TO, clamp } from "../lib/pipeline";
+import Stage from "./Stage";
 
 const W = 1080, H = 1920;
 
@@ -22,6 +23,34 @@ function loadImage(src) {
     img.onerror = reject;
     img.src = src;
   });
+}
+
+function loadVideoEl(src) {
+  return new Promise((resolve, reject) => {
+    const video = document.createElement("video");
+    video.muted = true;
+    video.loop = true;
+    video.playsInline = true;
+    video.src = src;
+    video.onloadeddata = () => resolve(video);
+    video.onerror = reject;
+  });
+}
+
+// Loads each scene's media (image or uploaded video clip) as either an
+// <img> or a playing (muted) <video> element, so the render loop can
+// ctx.drawImage() either one the same way.
+async function loadSceneMedia(scenes) {
+  return Promise.all(
+    scenes.map(async (s) => {
+      if (s.mediaKind === "video" && s.videoDataUrl) {
+        const el = await loadVideoEl(s.videoDataUrl);
+        return { kind: "video", el };
+      }
+      const el = await loadImage(s.imageDataUrl);
+      return { kind: "image", el };
+    })
+  );
 }
 
 function wrapText(ctx, text, maxWidth) {
@@ -103,20 +132,21 @@ function makeThreeRig() {
   return { THREE, renderer, scene, camera, particles, cardMesh: null, cardTexCache: new Map() };
 }
 
-async function ensureCardMesh(rig, img, sceneId) {
+async function ensureCardMesh(rig, media, sceneId) {
   const { THREE, scene, cardTexCache } = rig;
   if (rig.cardMesh) {
     scene.remove(rig.cardMesh);
     rig.cardMesh = null;
   }
+  const { kind, el } = media;
   let tex = cardTexCache.get(sceneId);
   if (!tex) {
-    tex = new THREE.Texture(img);
-    tex.needsUpdate = true;
+    tex = kind === "video" ? new THREE.VideoTexture(el) : new THREE.Texture(el);
+    if (kind !== "video") tex.needsUpdate = true;
     tex.colorSpace = THREE.SRGBColorSpace || tex.colorSpace;
     cardTexCache.set(sceneId, tex);
   }
-  const aspect = img.width / img.height;
+  const aspect = kind === "video" ? el.videoWidth / el.videoHeight : el.width / el.height;
   const h = 3.6;
   const w = h * Math.min(aspect, 0.9);
   const geo = new THREE.PlaneGeometry(w, h, 1, 1);
@@ -135,10 +165,16 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   const videoBlobRef = useRef(null);
   const rigRef = useRef(null);
 
-  async function onImageUpload(i, file) {
+  async function onMediaUpload(i, file) {
     const dataUrl = await fileToDataUrl(file);
+    const isVideo = file.type.startsWith("video/");
     const next = scenes.slice();
-    next[i] = { ...next[i], imageDataUrl: dataUrl };
+    next[i] = {
+      ...next[i],
+      mediaKind: isVideo ? "video" : "image",
+      imageDataUrl: isVideo ? undefined : dataUrl,
+      videoDataUrl: isVideo ? dataUrl : undefined,
+    };
     setScenes(next);
   }
 
@@ -148,7 +184,8 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
     setScenes(next);
   }
 
-  const allImagesReady = scenes.length > 0 && scenes.every((s) => s.imageDataUrl);
+  const allImagesReady =
+    scenes.length > 0 && scenes.every((s) => (s.mediaKind === "video" ? s.videoDataUrl : s.imageDataUrl));
 
   async function renderVideo() {
     if (!window.THREE) {
@@ -164,7 +201,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
       const AudioCtx = window.AudioContext || window.webkitAudioContext;
       const audioCtx = new AudioCtx();
 
-      const images = await Promise.all(scenes.map((s) => loadImage(s.imageDataUrl)));
+      const media = await loadSceneMedia(scenes);
       const audioBuffers = await Promise.all(
         scenes.map(async (s) => {
           const resp = await fetch(s.audioDataUrl);
@@ -210,18 +247,28 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
       recorder.start();
 
       let lastSceneKey = null;
+      let activeVideoIdx = -1;
 
       await new Promise((resolve) => {
         function draw() {
           const now = audioCtx.currentTime - startTime;
           if (now >= totalDuration + 0.15) {
             recorder.stop();
+            if (activeVideoIdx >= 0) media[activeVideoIdx].el.pause();
             resolve();
             return;
           }
           let idx = 0;
           for (let i = 0; i < starts.length; i++) if (now >= starts[i]) idx = i;
           const s = scenes[idx];
+
+          if (media[idx].kind === "video" && activeVideoIdx !== idx) {
+            if (activeVideoIdx >= 0 && media[activeVideoIdx].kind === "video") media[activeVideoIdx].el.pause();
+            const v = media[idx].el;
+            v.currentTime = 0;
+            v.play().catch(() => {});
+            activeVideoIdx = idx;
+          }
           const sceneStart = starts[idx];
           const sceneDur = audioBuffers[idx].duration;
           const localT = clamp(now - sceneStart, 0, sceneDur);
@@ -235,15 +282,16 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
 
           if (s.template === "kenburns" || !s.template) {
             const scale = ZOOM_FROM + (ZOOM_TO - ZOOM_FROM) * p;
-            const img = images[idx];
-            const iw = img.width, ih = img.height;
+            const { kind, el } = media[idx];
+            const iw = kind === "video" ? el.videoWidth : el.width;
+            const ih = kind === "video" ? el.videoHeight : el.height;
             const targetAR = W / H;
             let dw, dh;
             if (iw / ih > targetAR) { dh = H * scale; dw = dh * (iw / ih); }
             else { dw = W * scale; dh = dw * (ih / iw); }
             const dx = (W - dw) / 2;
             const dy = (H - dh) / 2 - p * 14;
-            ctx.drawImage(img, dx, dy, dw, dh);
+            ctx.drawImage(el, dx, dy, dw, dh);
           } else if (s.template === "particles") {
             rig.particles.visible = true;
             if (rig.cardMesh) rig.cardMesh.visible = false;
@@ -252,8 +300,10 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
             rig.renderer.render(rig.scene, rig.camera);
             ctx.drawImage(rig.renderer.domElement, 0, 0, W, H);
             // floating product card on top
-            const img = images[idx];
-            const cw = W * 0.62, ch = cw * (img.height / img.width);
+            const { kind, el: img } = media[idx];
+            const imgH = kind === "video" ? img.videoHeight : img.height;
+            const imgW = kind === "video" ? img.videoWidth : img.width;
+            const cw = W * 0.62, ch = cw * (imgH / imgW);
             const cx = (W - cw) / 2, cy = H * 0.32 + Math.sin(now * 1.2) * 10;
             ctx.save();
             ctx.shadowColor = "rgba(0,0,0,0.5)";
@@ -274,7 +324,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
             rig.particles.visible = false;
             const key = `spin-${idx}`;
             if (lastSceneKey !== key) {
-              ensureCardMesh(rig, images[idx], s.scene_id);
+              ensureCardMesh(rig, media[idx], s.scene_id);
               lastSceneKey = key;
             }
             if (rig.cardMesh) {
@@ -307,15 +357,12 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   }
 
   return (
-    <div className={`stage ${unlocked ? "unlocked" : ""}`}>
-      <div className="stage-head">
-        <div className="stage-num">3-4</div>
-        <h2>ตัดต่อวิดีโอ + ซับไตเติล (3D Templates)</h2>
-      </div>
-      <div className="stage-sub">
-        อัปโหลดภาพต่อฉาก เลือกเทมเพลต แล้วเรนเดอร์วิดีโอในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอเซิร์ฟเวอร์)
-      </div>
-
+    <Stage
+      num="4-5"
+      title="ตัดต่อวิดีโอ + ซับไตเติล (3D Templates)"
+      sub="อัปโหลดภาพหรือวิดีโอต่อฉาก เลือกเทมเพลต แล้วเรนเดอร์วิดีโอในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอเซิร์ฟเวอร์)"
+      unlocked={unlocked}
+    >
       {scenes.map((s, i) => (
         <div className="scene-card" key={s.scene_id}>
           <div className="scene-card-head">
@@ -324,9 +371,18 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
           </div>
           <div className="row" style={{ marginTop: 10 }}>
             <div>
-              <label className="field-label">ภาพประกอบ</label>
-              <input type="file" accept="image/*" onChange={(e) => e.target.files[0] && onImageUpload(i, e.target.files[0])} />
-              {s.imageDataUrl && <img src={s.imageDataUrl} alt="" style={{ width: 90, marginTop: 8, borderRadius: 8 }} />}
+              <label className="field-label">ภาพประกอบ / วิดีโอ</label>
+              <input
+                type="file"
+                accept="image/*,video/*"
+                onChange={(e) => e.target.files[0] && onMediaUpload(i, e.target.files[0])}
+              />
+              {s.mediaKind === "video" && s.videoDataUrl && (
+                <video src={s.videoDataUrl} muted loop autoPlay style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
+              )}
+              {s.mediaKind !== "video" && s.imageDataUrl && (
+                <img src={s.imageDataUrl} alt="" style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
+              )}
             </div>
             <div>
               <label className="field-label">เทมเพลต</label>
@@ -345,7 +401,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
           <button className="btn" onClick={renderVideo} disabled={!allImagesReady || rendering}>
             {rendering ? `กำลังเรนเดอร์… ${(progress * 100).toFixed(0)}%` : "🎬 เรนเดอร์วิดีโอ"}
           </button>
-          {!allImagesReady && <div className="hint">อัปโหลดภาพให้ครบทุกฉากก่อน</div>}
+          {!allImagesReady && <div className="hint">อัปโหลดภาพหรือวิดีโอให้ครบทุกฉากก่อน</div>}
           {rendering && (
             <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
           )}
@@ -364,6 +420,6 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
         </>
       )}
       {done && <div className="status-pill ok" style={{ marginTop: 14 }}>✓ วิดีโอเรนเดอร์เสร็จแล้ว</div>}
-    </div>
+    </Stage>
   );
 }

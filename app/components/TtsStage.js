@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { retimeScenes } from "../lib/pipeline";
+import Stage from "./Stage";
 
 function measureAudioDuration(dataUrl) {
   return new Promise((resolve) => {
@@ -32,27 +33,34 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
   const [providerNote, setProviderNote] = useState("");
   const [errMsg, setErrMsg] = useState("");
 
+  async function synthesize(scene) {
+    const res = await fetch("/api/tts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: scene.voiceover_text, lang: "th" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "render failed");
+    const audioDuration = await measureAudioDuration(data.audioBase64);
+    return { audioDataUrl: data.audioBase64, audioDuration, provider: data.provider };
+  }
+
+  function noteFor(provider) {
+    return provider === "google-translate-unofficial"
+      ? "ใช้เสียงฟรีจาก Google Translate (unofficial) — คุณภาพเสียงกลางๆ ตั้ง ELEVENLABS_API_KEY เพื่อเสียงดีขึ้น"
+      : "ใช้ ElevenLabs";
+  }
+
   async function renderOne(i) {
     const s = scenes[i];
     setBusyId(s.scene_id);
     setErrMsg("");
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: s.voiceover_text, lang: "th" }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "render failed");
-      const dur = await measureAudioDuration(data.audioBase64);
+      const { audioDataUrl, audioDuration, provider } = await synthesize(s);
       const next = scenes.slice();
-      next[i] = { ...next[i], audioDataUrl: data.audioBase64, audioDuration: dur };
+      next[i] = { ...next[i], audioDataUrl, audioDuration };
       setScenes(retimeScenes(next));
-      setProviderNote(
-        data.provider === "google-translate-unofficial"
-          ? "ใช้เสียงฟรีจาก Google Translate (unofficial) — คุณภาพเสียงกลางๆ ตั้ง ELEVENLABS_API_KEY เพื่อเสียงดีขึ้น"
-          : "ใช้ ElevenLabs"
-      );
+      setProviderNote(noteFor(provider));
     } catch (e) {
       setErrMsg(`ฉาก ${s.scene_id}: ${String(e.message || e)}`);
     } finally {
@@ -60,24 +68,38 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
     }
   }
 
+  // Accumulates into one local array across iterations — calling renderOne in
+  // a loop would re-slice the stale `scenes` prop each time (the component
+  // can't re-render mid-loop), so every scene would overwrite the previous
+  // one and only the last would keep its audio.
   async function renderAll() {
     setBusyAll(true);
-    for (let i = 0; i < scenes.length; i++) {
-      await renderOne(i);
+    setErrMsg("");
+    const working = scenes.slice();
+    for (let i = 0; i < working.length; i++) {
+      setBusyId(working[i].scene_id);
+      try {
+        const { audioDataUrl, audioDuration, provider } = await synthesize(working[i]);
+        working[i] = { ...working[i], audioDataUrl, audioDuration };
+        setScenes(retimeScenes(working.slice()));
+        setProviderNote(noteFor(provider));
+      } catch (e) {
+        setErrMsg(`ฉาก ${working[i].scene_id}: ${String(e.message || e)}`);
+      }
     }
+    setBusyId(null);
     setBusyAll(false);
   }
 
   const allRendered = scenes.length > 0 && scenes.every((s) => s.audioDataUrl);
 
   return (
-    <div className={`stage ${unlocked ? "unlocked" : ""}`}>
-      <div className="stage-head">
-        <div className="stage-num">2</div>
-        <h2>พากย์เสียง (Voiceover)</h2>
-      </div>
-      <div className="stage-sub">แปลงคำพากย์แต่ละฉากเป็นเสียง แล้ววัดความยาวจริงเพื่อจับเวลาวิดีโอให้ตรง</div>
-
+    <Stage
+      num={3}
+      title="พากย์เสียง (Voiceover)"
+      sub="แปลงคำพากย์แต่ละฉากเป็นเสียง แล้ววัดความยาวจริงเพื่อจับเวลาวิดีโอให้ตรง"
+      unlocked={unlocked}
+    >
       {unlocked && (
         <button className="btn" onClick={renderAll} disabled={busyAll || scenes.length === 0}>
           {busyAll ? "กำลังพากย์เสียงทั้งหมด…" : "🔊 พากย์เสียงทุกฉาก"}
@@ -108,6 +130,6 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
         </div>
       )}
       {done && <div className="status-pill ok" style={{ marginTop: 14 }}>✓ พากย์เสียงครบทุกฉากแล้ว</div>}
-    </div>
+    </Stage>
   );
 }

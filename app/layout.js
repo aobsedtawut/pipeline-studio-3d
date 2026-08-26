@@ -16,10 +16,10 @@ export default function RootLayout({ children }) {
           href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap"
           rel="stylesheet"
         />
-        {/* Three.js + GSAP loaded from CDN — this is a real hosted Vercel app
-            (not a claude.ai Artifact), so external script tags are fine. */}
+        {/* Three.js loaded from CDN — this is a real hosted Vercel app (not a
+            claude.ai Artifact), so an external script tag is fine. Required
+            by VideoStage.js/Hero3D.js (window.THREE), not decorative. */}
         <script src="https://unpkg.com/three@0.160.0/build/three.min.js" defer></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js" defer></script>
       </head>
       <body>{children}</body>
     </html>
