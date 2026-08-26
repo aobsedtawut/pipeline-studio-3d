@@ -51,6 +51,8 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
   return (
     <Stage
       num={1}
+      character="product"
+      accent="--accent"
       title="เลือกสินค้า (Product)"
       sub="ค้นหาสินค้า Shopee affiliate ตามคำค้น แล้วเลือกอันที่ commission สูงสุด (หรือ sales/price) เพื่อใช้ทำสคริปต์ต่อ — ขั้นตอนนี้ข้ามได้ถ้าอยากพิมพ์ชื่อสินค้าเองในขั้นตอนถัดไป"
       unlocked={unlocked}

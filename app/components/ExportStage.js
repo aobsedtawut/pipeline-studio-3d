@@ -30,6 +30,8 @@ export default function ExportStage({ unlocked, videoBlob, videoUrl, duration, o
   return (
     <Stage
       num={6}
+      character="export"
+      accent="--accent-5"
       title="Export"
       sub="ตรวจความยาวเทียบแต่ละแพลตฟอร์ม แล้วดาวน์โหลดไฟล์สำหรับโพสต์"
       unlocked={unlocked}

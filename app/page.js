@@ -5,6 +5,7 @@ import { motion } from "motion/react";
 import Hero3D from "./components/Hero3D";
 import PipelineHUD from "./components/PipelineHUD";
 import HistoryDrawer from "./components/HistoryDrawer";
+import StageCharacter from "./components/StageCharacter";
 import ProductStage from "./components/ProductStage";
 import ScriptStage from "./components/ScriptStage";
 import TtsStage from "./components/TtsStage";
@@ -12,7 +13,17 @@ import VideoStage from "./components/VideoStage";
 import ExportStage from "./components/ExportStage";
 import PostStage from "./components/PostStage";
 
-const STAGE_LABELS = ["เลือกสินค้า", "สคริปต์", "พากย์เสียง", "ตัดต่อ+ซับ", "Export", "โพสต์"];
+// One mascot + accent color per stage — matches the character-per-stage
+// mascot shown in each Stage card's badge (see Stage.js).
+const STAGE_META = [
+  { key: "product", label: "เลือกสินค้า", accent: "--accent" },
+  { key: "script", label: "สคริปต์", accent: "--accent-2" },
+  { key: "tts", label: "พากย์เสียง", accent: "--accent-3" },
+  { key: "video", label: "ตัดต่อ+ซับ", accent: "--accent-4" },
+  { key: "export", label: "Export", accent: "--accent-5" },
+  { key: "post", label: "โพสต์", accent: "--accent-6" },
+];
+const STAGE_LABELS = STAGE_META.map((s) => s.label);
 
 const stageListVariants = {
   hidden: {},
@@ -31,6 +42,18 @@ export default function Page() {
   const [exportDone, setExportDone] = useState(false);
   const runIdRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const stageRefs = {
+    product: useRef(null),
+    script: useRef(null),
+    tts: useRef(null),
+    video: useRef(null),
+    export: useRef(null),
+    post: useRef(null),
+  };
+
+  function scrollToStage(key) {
+    stageRefs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   const stageIndex = exportDone ? 5 : videoDone ? 4 : ttsDone ? 3 : scriptDone ? 2 : productDone ? 1 : 0;
   const totalDuration = scenes.length ? scenes[scenes.length - 1].end_sec : 0;
@@ -94,12 +117,29 @@ export default function Page() {
             (ไม่ติด serverless time limit) ด้วยเทมเพลต 3D ที่สร้างจาก Three.js
           </p>
           <div className="flex items-start justify-between gap-4 flex-wrap mt-6">
-            <div className="stage-track !mt-0">
-              {STAGE_LABELS.map((label, i) => (
-                <span key={label} className={`stage-chip ${i < stageIndex ? "done" : i === stageIndex ? "active" : ""}`}>
-                  {i + 1}. {label}
-                </span>
-              ))}
+            <div className="flex gap-2.5 flex-wrap">
+              {STAGE_META.map((s, i) => {
+                const state = i < stageIndex ? "done" : i === stageIndex ? "active" : "pending";
+                return (
+                  <motion.button
+                    key={s.key}
+                    type="button"
+                    onClick={() => scrollToStage(s.key)}
+                    whileHover={{ y: -3 }}
+                    whileTap={{ scale: 0.94 }}
+                    className="flex flex-col items-center gap-1 rounded-2xl border-2 px-3 py-2.5 transition-colors"
+                    style={{
+                      color: `var(${s.accent})`,
+                      borderColor: state === "done" ? "var(--ok)" : state === "active" ? `var(${s.accent})` : "var(--border)",
+                      background: state === "active" ? `color-mix(in srgb, var(${s.accent}) 14%, var(--surface))` : "var(--surface)",
+                      opacity: state === "pending" ? 0.6 : 1,
+                    }}
+                  >
+                    <StageCharacter kind={s.key} size={30} />
+                    <span className="text-[10.5px] font-bold text-[var(--ink-soft)] whitespace-nowrap">{s.label}</span>
+                  </motion.button>
+                );
+              })}
             </div>
             <HistoryDrawer onLoad={resumeRun} />
           </div>
@@ -110,55 +150,67 @@ export default function Page() {
       </header>
 
       <motion.div className="wrap" variants={stageListVariants} initial="hidden" animate="show">
-        <ProductStage
-          unlocked={true}
-          meta={meta}
-          setMeta={setMeta}
-          done={productDone}
-          onDone={() => setProductDone(true)}
-        />
+        <div ref={stageRefs.product}>
+          <ProductStage
+            unlocked={true}
+            meta={meta}
+            setMeta={setMeta}
+            done={productDone}
+            onDone={() => setProductDone(true)}
+          />
+        </div>
 
-        <ScriptStage
-          key={meta.productName || "none"}
-          unlocked={true}
-          scenes={scenes}
-          setScenes={setScenes}
-          meta={meta}
-          setMeta={setMeta}
-          done={scriptDone}
-          onDone={() => setScriptDone(true)}
-        />
+        <div ref={stageRefs.script}>
+          <ScriptStage
+            key={meta.productName || "none"}
+            unlocked={true}
+            scenes={scenes}
+            setScenes={setScenes}
+            meta={meta}
+            setMeta={setMeta}
+            done={scriptDone}
+            onDone={() => setScriptDone(true)}
+          />
+        </div>
 
-        <TtsStage
-          unlocked={scriptDone}
-          scenes={scenes}
-          setScenes={setScenes}
-          done={ttsDone}
-          onDone={() => setTtsDone(true)}
-        />
+        <div ref={stageRefs.tts}>
+          <TtsStage
+            unlocked={scriptDone}
+            scenes={scenes}
+            setScenes={setScenes}
+            done={ttsDone}
+            onDone={() => setTtsDone(true)}
+          />
+        </div>
 
-        <VideoStage
-          unlocked={ttsDone}
-          scenes={scenes}
-          setScenes={setScenes}
-          done={videoDone}
-          onDone={(blob, url) => {
-            setVideoBlob(blob);
-            setVideoUrl(url);
-            setVideoDone(true);
-          }}
-        />
+        <div ref={stageRefs.video}>
+          <VideoStage
+            unlocked={ttsDone}
+            scenes={scenes}
+            setScenes={setScenes}
+            done={videoDone}
+            onDone={(blob, url) => {
+              setVideoBlob(blob);
+              setVideoUrl(url);
+              setVideoDone(true);
+            }}
+          />
+        </div>
 
-        <ExportStage
-          unlocked={videoDone}
-          videoBlob={videoBlob}
-          videoUrl={videoUrl}
-          duration={totalDuration}
-          done={exportDone}
-          onDone={() => setExportDone(true)}
-        />
+        <div ref={stageRefs.export}>
+          <ExportStage
+            unlocked={videoDone}
+            videoBlob={videoBlob}
+            videoUrl={videoUrl}
+            duration={totalDuration}
+            done={exportDone}
+            onDone={() => setExportDone(true)}
+          />
+        </div>
 
-        <PostStage unlocked={exportDone} meta={meta} scenes={scenes} videoUrl={videoUrl} />
+        <div ref={stageRefs.post}>
+          <PostStage unlocked={exportDone} meta={meta} scenes={scenes} videoUrl={videoUrl} />
+        </div>
 
         <footer>
           Pipeline Studio · เรนเดอร์ทุกอย่างในเบราว์เซอร์ ยกเว้นสคริปต์ AI-assist / TTS / โพสต์ Facebook ที่ผ่าน

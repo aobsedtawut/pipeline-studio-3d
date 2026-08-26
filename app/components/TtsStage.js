@@ -96,6 +96,8 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
   return (
     <Stage
       num={3}
+      character="tts"
+      accent="--accent-3"
       title="พากย์เสียง (Voiceover)"
       sub="แปลงคำพากย์แต่ละฉากเป็นเสียง แล้ววัดความยาวจริงเพื่อจับเวลาวิดีโอให้ตรง"
       unlocked={unlocked}

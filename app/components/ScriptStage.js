@@ -53,6 +53,8 @@ export default function ScriptStage({ unlocked, scenes, setScenes, meta, setMeta
   return (
     <Stage
       num={2}
+      character="script"
+      accent="--accent-2"
       title="สคริปต์ (Script)"
       sub="ใส่ชื่อสินค้า + จุดเด่น แล้วสร้างสคริปต์เป็นฉากๆ พร้อมแก้ไขได้ก่อนพากย์เสียง"
       unlocked={unlocked}

@@ -48,6 +48,8 @@ export default function PostStage({ unlocked, meta, scenes, videoUrl }) {
   return (
     <Stage
       num={7}
+      character="post"
+      accent="--accent-6"
       title="โพสต์ (Post)"
       sub="โพสต์แคปชั่น + ภาพหน้าปกลง Facebook Page จริงผ่าน Graph API — ส่วนวิดีโอเต็มยังต้องดาวน์โหลดไปโพสต์เองก่อน (resumable video upload ยังไม่รวมในเวอร์ชันนี้ เพราะไฟล์วิดีโอใหญ่กว่าที่ serverless function รับได้ในครั้งเดียว)"
       unlocked={unlocked}

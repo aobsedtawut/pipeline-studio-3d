@@ -359,6 +359,8 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   return (
     <Stage
       num="4-5"
+      character="video"
+      accent="--accent-4"
       title="ตัดต่อวิดีโอ + ซับไตเติล (3D Templates)"
       sub="อัปโหลดภาพหรือวิดีโอต่อฉาก เลือกเทมเพลต แล้วเรนเดอร์วิดีโอในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอเซิร์ฟเวอร์)"
       unlocked={unlocked}

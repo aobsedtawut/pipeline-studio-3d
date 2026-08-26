@@ -13,6 +13,9 @@
   --color-accent-ink: var(--accent-ink);
   --color-accent-2: var(--accent-2);
   --color-accent-3: var(--accent-3);
+  --color-accent-4: var(--accent-4);
+  --color-accent-5: var(--accent-5);
+  --color-accent-6: var(--accent-6);
   --color-ok: var(--ok);
   --color-warn: var(--warn);
   --font-display: var(--font-display);
@@ -34,6 +37,9 @@
   --accent-2-ink: #04201d;
   --accent-3: #ff5b8f;
   --accent-3-ink: #2a0413;
+  --accent-4: #d9860e;
+  --accent-5: #6ba32f;
+  --accent-6: #1c8fe6;
   --ok: #16a26b;
   --warn: #d13b3b;
   --shadow: rgba(23, 26, 43, 0.1);
@@ -60,6 +66,9 @@
     --accent-2-ink: #04201d;
     --accent-3: #ff7fae;
     --accent-3-ink: #2a0413;
+    --accent-4: #f0a33d;
+    --accent-5: #92cf4a;
+    --accent-6: #5aaef0;
     --ok: #3ddb96;
     --warn: #ff6767;
     --shadow: rgba(0, 0, 0, 0.35);
@@ -82,6 +91,9 @@
   --accent-2-ink: #04201d;
   --accent-3: #ff7fae;
   --accent-3-ink: #2a0413;
+  --accent-4: #f0a33d;
+  --accent-5: #92cf4a;
+  --accent-6: #5aaef0;
   --ok: #3ddb96;
   --warn: #ff6767;
   --shadow: rgba(0, 0, 0, 0.35);
@@ -130,35 +142,28 @@ h1, h2, h3 { font-family: var(--font-display); font-weight: 700; margin: 0; text
 h1.title { margin-top: 18px; font-size: clamp(30px, 5vw, 46px); line-height: 1.06; letter-spacing: -0.01em; }
 .dek { margin-top: 14px; max-width: 62ch; color: var(--ink-soft); font-size: 16px; font-weight: 500; }
 
-.stage-track { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 26px; }
-.stage-chip {
-  font-family: var(--font-display); font-size: 12px; font-weight: 700;
-  padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border);
-  color: var(--ink-faint); background: var(--surface);
-}
-.stage-chip.done { color: var(--ok); border-color: var(--ok); }
-.stage-chip.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
-
 /* ---------- Stage cards ---------- */
 .stage {
   background: var(--surface);
   border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
   border-radius: 20px;
   padding: 28px 28px 24px;
   margin: 22px 0;
   box-shadow: 0 10px 30px var(--shadow);
   opacity: 0.55;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.3s ease, border-top-color 0.3s ease;
 }
-.stage.unlocked { opacity: 1; }
+.stage.unlocked { opacity: 1; border-top-color: var(--stage-accent, var(--accent)); }
 .stage-head { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
 .stage-num {
   font-family: var(--font-display); font-weight: 700; font-size: 15px;
-  width: 34px; height: 34px; border-radius: 10px;
+  width: 34px; height: 34px; border-radius: 12px;
   display: flex; align-items: center; justify-content: center;
   background: var(--surface-2); color: var(--ink-soft); flex-shrink: 0;
+  transition: background 0.3s ease;
 }
-.stage.unlocked .stage-num { background: var(--accent); color: var(--accent-ink); }
+.stage.unlocked .stage-num { background: var(--stage-accent, var(--accent)); color: #fff; }
 .stage-head h2 { font-size: 19px; }
 .stage-sub { color: var(--ink-faint); font-size: 13.5px; margin: 4px 0 18px 48px; }
 
