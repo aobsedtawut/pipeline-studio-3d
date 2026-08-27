@@ -16,3 +16,18 @@ model PipelineRun {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+// TikTok Shop's Creator Affiliate OAuth tokens belong to a specific
+// authorized creator account, expire, and rotate on refresh — unlike
+// Shopee's static app secret, they can't live in an env var. Single row per
+// connected creator (openId); this is a single-owner tool so in practice
+// there's just one.
+model TikTokAuth {
+  id           String   @id @default(cuid())
+  openId       String   @unique
+  accessToken  String
+  refreshToken String
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

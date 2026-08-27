@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Stage from "./Stage";
 
 // Shopee's Affiliate Open API is keyword-search only (no browse-by-category
@@ -22,14 +22,22 @@ const SORT_OPTIONS = [
   { value: "price", label: "ราคา", icon: "💵" },
 ];
 
-// Only Shopee has a live search integration (app/api/product-search) —
-// TikTok Shop / Lazada / other platforms go through manual entry below
-// until their affiliate APIs are wired up too.
+// Shopee and TikTok Shop have live search integrations. Lazada has no
+// official affiliate/offer-search API at all (verified against its Open
+// Platform docs — only third-party networks like Involve Asia offer one,
+// which is a separate integration), so it and any other platform go
+// through manual entry below.
 const PLATFORMS = [
   { key: "shopee", label: "Shopee", icon: "🛍️" },
   { key: "tiktok", label: "TikTok Shop", icon: "🎵" },
   { key: "lazada", label: "Lazada", icon: "🅻" },
   { key: "other", label: "อื่นๆ", icon: "🔗" },
+];
+
+const TIKTOK_SORT_OPTIONS = [
+  { value: "commission", label: "Commission", icon: "💰" },
+  { value: "sales", label: "ขายดี", icon: "🔥" },
+  { value: "price", label: "ราคา", icon: "💵" },
 ];
 
 const EMPTY_MANUAL_FORM = {
@@ -55,9 +63,70 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
   const [aiStatus, setAiStatus] = useState(null); // null | "loading" | "ok" | "err"
   const [aiMsg, setAiMsg] = useState("");
   const [aiPicks, setAiPicks] = useState({}); // itemId -> reason
-  const [mode, setMode] = useState("search"); // "search" | "manual"
+  const [mode, setMode] = useState("search"); // "search" | "tiktok" | "manual"
   const [manualForm, setManualForm] = useState(EMPTY_MANUAL_FORM);
   const [manualMsg, setManualMsg] = useState("");
+  const [tiktokConnected, setTiktokConnected] = useState(null); // null (checking) | true | false
+  const [tiktokKeyword, setTiktokKeyword] = useState("");
+  const [tiktokSortBy, setTiktokSortBy] = useState("commission");
+  const [tiktokStatus, setTiktokStatus] = useState(null); // null | "loading" | "ok" | "err"
+  const [tiktokMsg, setTiktokMsg] = useState("");
+  const [choosingId, setChoosingId] = useState(null);
+
+  useEffect(() => {
+    fetch("/api/tiktok-auth/status")
+      .then((r) => r.json())
+      .then((d) => setTiktokConnected(!!d.connected))
+      .catch(() => setTiktokConnected(false));
+
+    const params = new URLSearchParams(window.location.search);
+    const tiktokParam = params.get("tiktok");
+    if (tiktokParam === "connected") {
+      setMode("tiktok");
+      setTiktokMsg("✓ เชื่อมต่อ TikTok Shop สำเร็จ");
+    } else if (tiktokParam === "error") {
+      setMode("tiktok");
+      setTiktokStatus("err");
+      setTiktokMsg("เชื่อมต่อ TikTok Shop ไม่สำเร็จ ลองใหม่อีกครั้ง");
+    }
+    if (tiktokParam) {
+      params.delete("tiktok");
+      const qs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (qs ? `?${qs}` : ""));
+    }
+  }, []);
+
+  async function searchTiktok(overrideSort) {
+    if (!tiktokKeyword.trim()) return;
+    const sb = overrideSort ?? tiktokSortBy;
+    setTiktokStatus("loading");
+    setTiktokMsg("");
+    setAiPicks({});
+    try {
+      const res = await fetch("/api/tiktok-search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ keyword: tiktokKeyword, sortBy: sb, pageSize: Number(limit) }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setProducts(data.products || []);
+        setTiktokStatus("ok");
+        if (!data.products?.length) setTiktokMsg("ไม่พบสินค้าตรงคำค้นหานี้");
+      } else {
+        setTiktokStatus("err");
+        setTiktokMsg(data.error || "ค้นหาไม่สำเร็จ");
+      }
+    } catch (e) {
+      setTiktokStatus("err");
+      setTiktokMsg(String(e.message || e));
+    }
+  }
+
+  function changeTiktokSort(value) {
+    setTiktokSortBy(value);
+    if (products.length) searchTiktok(value);
+  }
 
   async function search(overrideKeyword, overrideSort) {
     const kw = overrideKeyword ?? keyword;
@@ -156,13 +225,42 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
     setManualForm({ ...EMPTY_MANUAL_FORM, platform: manualForm.platform });
   }
 
-  function choose(p) {
-    setSelected(p);
+  async function choose(p) {
+    let chosen = p;
+    // TikTok search results carry the plain product page, not a
+    // commission-tracked link — that needs a separate API call, made here
+    // (lazily, only for the product actually picked) rather than for every
+    // search result.
+    if (p.platform === "tiktok" && p._tiktokProductId && !p.offerLink) {
+      setChoosingId(p.itemId);
+      try {
+        const res = await fetch("/api/tiktok-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ productId: p._tiktokProductId }),
+        });
+        const data = await res.json();
+        if (res.ok && data.link) {
+          chosen = { ...p, offerLink: data.link };
+          setProducts((prev) => prev.map((x) => (x.itemId === p.itemId ? chosen : x)));
+        } else {
+          setTiktokMsg(data.error || "สร้างลิงก์ affiliate ไม่สำเร็จ — เลือกสินค้านี้ไม่ได้");
+          setChoosingId(null);
+          return;
+        }
+      } catch (e) {
+        setTiktokMsg(String(e.message || e));
+        setChoosingId(null);
+        return;
+      }
+      setChoosingId(null);
+    }
+    setSelected(chosen);
     setMeta({
       ...meta,
-      productName: p.productName,
-      chosenProduct: p,
-      affiliateLink: p.offerLink || p.productLink || "",
+      productName: chosen.productName,
+      chosenProduct: chosen,
+      affiliateLink: chosen.offerLink || chosen.productLink || "",
     });
     onDone();
   }
@@ -184,6 +282,14 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
           onClick={() => setMode("search")}
         >
           🔍 ค้นหาอัตโนมัติ (Shopee)
+        </button>
+        <button
+          type="button"
+          className="btn small secondary"
+          style={mode === "tiktok" ? { borderColor: "var(--accent)", color: "var(--accent)" } : undefined}
+          onClick={() => setMode("tiktok")}
+        >
+          🎵 ค้นหาอัตโนมัติ (TikTok Shop)
         </button>
         <button
           type="button"
@@ -262,6 +368,71 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
         </>
       )}
 
+      {mode === "tiktok" && (
+        <>
+          {tiktokConnected === null && <div className="hint">กำลังเช็คการเชื่อมต่อ…</div>}
+
+          {tiktokConnected === false && (
+            <div className="scene-card">
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>ยังไม่ได้เชื่อมต่อ TikTok Shop</div>
+              <div className="hint" style={{ marginBottom: 12 }}>
+                ต้องล็อกอินด้วยบัญชี TikTok Shop Creator Affiliate ที่อนุมัติแล้วครั้งเดียว ระบบจะจำการเชื่อมต่อไว้
+              </div>
+              <a className="btn" href="/api/tiktok-auth/authorize">
+                🎵 เชื่อมต่อ TikTok Shop
+              </a>
+              {tiktokMsg && <div className={`hint ${tiktokStatus === "err" ? "warn" : ""}`}>{tiktokMsg}</div>}
+            </div>
+          )}
+
+          {tiktokConnected === true && (
+            <>
+              {tiktokMsg && !tiktokStatus && <div className="hint">{tiktokMsg}</div>}
+              <label className="field-label">คำค้นหา</label>
+              <input
+                type="text"
+                value={tiktokKeyword}
+                onChange={(e) => setTiktokKeyword(e.target.value)}
+                placeholder="เช่น เคสมือถือ"
+                onKeyDown={(e) => e.key === "Enter" && searchTiktok()}
+              />
+
+              <label className="field-label">เรียงตาม</label>
+              <div className="flex gap-2 flex-wrap">
+                {TIKTOK_SORT_OPTIONS.map((o) => (
+                  <button
+                    key={o.value}
+                    type="button"
+                    className="btn small secondary"
+                    style={
+                      tiktokSortBy === o.value
+                        ? { borderColor: "var(--accent)", color: "var(--accent)", background: "color-mix(in srgb, var(--accent) 12%, var(--surface))" }
+                        : undefined
+                    }
+                    onClick={() => changeTiktokSort(o.value)}
+                  >
+                    {o.icon} {o.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex gap-2.5 flex-wrap" style={{ marginTop: 16 }}>
+                <button className="btn" onClick={() => searchTiktok()} disabled={tiktokStatus === "loading"}>
+                  {tiktokStatus === "loading" ? "กำลังค้นหา…" : "🎵 ค้นหาสินค้า"}
+                </button>
+                {products.length > 0 && (
+                  <button className="btn secondary" onClick={aiCurate} disabled={aiStatus === "loading"}>
+                    {aiStatus === "loading" ? "กำลังให้ AI คัดสินค้า…" : "🤖 ให้ AI เลือกให้"}
+                  </button>
+                )}
+              </div>
+              {tiktokMsg && <div className={`hint ${tiktokStatus === "err" ? "warn" : ""}`}>{tiktokMsg}</div>}
+              {aiMsg && <div className={`hint ${aiStatus === "err" ? "warn" : ""}`}>{aiMsg}</div>}
+            </>
+          )}
+        </>
+      )}
+
       {mode === "manual" && (
         <div className="scene-card">
           <label className="field-label">แพลตฟอร์ม</label>
@@ -337,8 +508,13 @@ export default function ProductStage({ unlocked, meta, setMeta, done, onDone }) 
             className={`btn secondary`}
             style={{ marginTop: 10 }}
             onClick={() => choose(p)}
+            disabled={choosingId === p.itemId}
           >
-            {selected?.itemId === p.itemId ? "✓ เลือกแล้ว" : "เลือกสินค้านี้"}
+            {choosingId === p.itemId
+              ? "กำลังสร้างลิงก์…"
+              : selected?.itemId === p.itemId
+                ? "✓ เลือกแล้ว"
+                : "เลือกสินค้านี้"}
           </button>
         </div>
       ))}

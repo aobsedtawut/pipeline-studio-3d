@@ -57,11 +57,12 @@ Anyone not on `ALLOWED_EMAILS` gets rejected at sign-in with an "ไม่ได
 | `ELEVENLABS_API_KEY` + `ELEVENLABS_VOICE_ID` | TTS falls back to Google Translate's free unofficial endpoint |
 | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` | required — no fallback — the Stage 7 Facebook Page post button will not work without these |
 | `DATABASE_URL` | run history/resume (the "History" drawer + autosave) is disabled — the pipeline itself still works fully client-side without it |
+| `TIKTOK_APP_KEY` + `TIKTOK_APP_SECRET` | Stage 1's TikTok Shop search tab shows a "not configured" error — Shopee search and manual entry still work |
 
-## Database (optional)
+## Database (optional, except for TikTok Shop)
 
-Run history is persisted to Postgres via Prisma, purely so you can resume a
-past run from the "History" drawer — nothing else depends on it.
+Run history and TikTok Shop's OAuth tokens are both persisted to Postgres
+via Prisma.
 
 ```bash
 # .env.local
@@ -79,9 +80,31 @@ Rendered video/export output is *not* persisted (blobs don't belong in a
 JSON column) — resuming a run restores product/script/scenes/audio and you
 just re-click "render" in the video stage.
 
+## TikTok Shop product search (Stage 1)
+
+Unlike Shopee's static app secret, TikTok Shop's Creator Affiliate API is
+OAuth-based — you personally need to be an **approved TikTok Shop Creator
+Affiliate** and authorize the app once, and it requires `DATABASE_URL` to
+be set (the resulting access/refresh tokens rotate and can't live in a
+static env var).
+
+1. Create an app in [TikTok Shop Partner Center](https://partner.tiktokshop.com) → App & Service → get `app_key` + `app_secret`.
+2. Set env vars:
+   ```bash
+   TIKTOK_APP_KEY="..."
+   TIKTOK_APP_SECRET="..."
+   ```
+3. In Stage 1, switch to the "ค้นหาอัตโนมัติ (TikTok Shop)" tab and click **เชื่อมต่อ TikTok Shop** — this redirects to TikTok's own login/consent screen. Approve it once; the app stores your tokens in Postgres and auto-refreshes them from then on.
+4. Redirect URI registered with your TikTok app must match this deployment's `/api/tiktok-auth/callback` (e.g. `https://<your-vercel-domain>/api/tiktok-auth/callback`).
+
+**Caveat:** the link-generation call (`app/api/tiktok-link/route.js`, used when you pick a TikTok product — turns the plain product page into a real commission-tracked link) has its exact response field name unverified against a live call; check it against your own response if it errors with "TikTok ไม่ส่งลิงก์กลับมา".
+
+**Lazada:** no official Lazada affiliate/offer-search API exists (checked directly against Lazada Open Platform's docs — every category there is seller-inventory-management, nothing affiliate-facing). Use the "กรอกเอง" manual-entry tab for Lazada products instead.
+
 ## Known gaps (see PROJECT NOTES below)
 
 - Facebook video upload is not implemented (text + cover image only); download the rendered `.webm` and post the video manually.
 - No automatic `.webm` → `.mp4` transcode.
 - The client-side 3D video renderer (`app/components/VideoStage.js`) has not been runtime-verified in an actual browser as of this commit — test all 7 stages after deploying and report any console errors.
 - Stage 1 (`app/api/product-search/route.js`) ports the Shopee Affiliate Open API auth scheme and GraphQL field names from memory, not a live schema pull — verify against your Shopee Affiliate Open API dashboard if it errors.
+- TikTok Shop's link-generation response shape is unverified — see the caveat above.
