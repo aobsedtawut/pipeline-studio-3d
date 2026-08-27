@@ -2,6 +2,7 @@
 
 import { motion } from "motion/react";
 import StageCharacter from "./StageCharacter";
+import Logo from "./Logo";
 
 // Left nav — the mascot-per-stage picker that used to sit as a horizontal
 // row in the hero, now a persistent sidebar so it's reachable while
@@ -9,8 +10,8 @@ import StageCharacter from "./StageCharacter";
 export default function Sidebar({ stageMeta, stageIndex, onNavigate }) {
   return (
     <aside className="sidebar">
-      <div className="sidebar-brand" aria-hidden="true">
-        🚀
+      <div className="sidebar-brand" style={{ color: "var(--accent)" }} aria-hidden="true">
+        <Logo size={28} />
       </div>
       <nav className="sidebar-nav">
         {stageMeta.map((s, i) => {

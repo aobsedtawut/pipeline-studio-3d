@@ -6,6 +6,7 @@ import Hero3D from "./components/Hero3D";
 import PipelineHUD from "./components/PipelineHUD";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
+import Logo from "./components/Logo";
 import ProductStage from "./components/ProductStage";
 import ScriptStage from "./components/ScriptStage";
 import TtsStage from "./components/TtsStage";
@@ -115,7 +116,10 @@ export default function Page() {
         <header className="hero">
           <Hero3D />
           <div className="wrap hero-inner">
-            <span className="eyebrow">🚀 Pipeline Studio — All-in-one, client-rendered</span>
+            <span className="eyebrow">
+              <Logo size={15} />
+              Pipeline Studio — All-in-one, client-rendered
+            </span>
             <h1 className="title">สคริปต์ → เสียง → วิดีโอ 3D → Export → โพสต์ ในหน้าเดียว</h1>
             <p className="dek">
               ทุกขั้นตอนของ affiliate content pipeline รวมในหน้าเดียว วิดีโอเรนเดอร์ในเบราว์เซอร์คุณเอง

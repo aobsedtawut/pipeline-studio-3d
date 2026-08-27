@@ -1,5 +1,5 @@
 import SignInButton from "../components/SignInButton";
-import StageCharacter from "../components/StageCharacter";
+import Logo from "../components/Logo";
 
 export const metadata = { title: "เข้าสู่ระบบ · Pipeline Studio" };
 
@@ -18,7 +18,7 @@ export default function SignInPage({ searchParams }) {
     >
       <div className="stage unlocked" style={{ maxWidth: 380, width: "100%", textAlign: "center" }}>
         <div style={{ display: "flex", justifyContent: "center", color: "var(--accent)", marginBottom: 8 }}>
-          <StageCharacter kind="product" size={56} />
+          <Logo size={56} />
         </div>
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 24 }}>Pipeline Studio</h1>
         <p className="hint" style={{ marginTop: 6, marginBottom: 20 }}>
