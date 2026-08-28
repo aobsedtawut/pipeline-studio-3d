@@ -70,7 +70,7 @@ function wrapText(ctx, text, maxWidth) {
   return lines;
 }
 
-function drawCaption(ctx, text, alpha, yOffset) {
+function drawCaption(ctx, text, alpha, yOffset, color = "#fff") {
   if (!text || alpha <= 0) return;
   ctx.save();
   ctx.globalAlpha = alpha;
@@ -86,11 +86,18 @@ function drawCaption(ctx, text, alpha, yOffset) {
     ctx.strokeStyle = "#000";
     ctx.lineWidth = 10;
     ctx.strokeText(line, W / 2, y);
-    ctx.fillStyle = "#fff";
+    ctx.fillStyle = color;
     ctx.fillText(line, W / 2, y);
   });
   ctx.restore();
 }
+
+const CAPTION_COLORS = [
+  { label: "ขาว", value: "#ffffff" },
+  { label: "เหลือง", value: "#ffe14d" },
+  { label: "เขียวมิ้นต์", value: "#4dffd2" },
+  { label: "ชมพู", value: "#ff6fb3" },
+];
 
 // --- Three.js helpers (window.THREE, loaded via CDN in layout.js) ---
 function makeThreeRig() {
@@ -176,6 +183,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   const [audioMode, setAudioMode] = useState("replace"); // "keep" | "replace"
   const [keepVolume, setKeepVolume] = useState(60);
   const [useCaptions, setUseCaptions] = useState(true);
+  const [captionColor, setCaptionColor] = useState("#ffffff");
 
   async function onAttachUpload(file) {
     const dataUrl = await fileToDataUrl(file);
@@ -306,7 +314,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
             const fadeIn = clamp(localT / 0.25, 0, 1);
             const fadeOut = clamp((sceneDur - localT) / 0.3, 0, 1);
             const capAlpha = Math.min(fadeIn, fadeOut);
-            if (s) drawCaption(ctx, s.caption_text, capAlpha, 20 * (1 - fadeIn));
+            if (s) drawCaption(ctx, s.caption_text, capAlpha, 20 * (1 - fadeIn), captionColor);
           }
 
           setProgress(now / totalDuration);
@@ -498,7 +506,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
             ctx.drawImage(rig.renderer.domElement, 0, 0, W, H);
           }
 
-          drawCaption(ctx, s.caption_text, capAlpha, 20 * (1 - fadeIn));
+          drawCaption(ctx, s.caption_text, capAlpha, 20 * (1 - fadeIn), captionColor);
 
           setProgress(now / totalDuration);
           requestAnimationFrame(draw);
@@ -543,6 +551,27 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
         >
           📎 แนบวิดีโอที่ตัดต่อแล้ว
         </button>
+      </div>
+
+      <label className="field-label">สีตัวอักษรซับ</label>
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: 16 }}>
+        {CAPTION_COLORS.map((c) => (
+          <button
+            key={c.value}
+            type="button"
+            className="btn small secondary"
+            onClick={() => setCaptionColor(c.value)}
+            style={{
+              borderColor: captionColor === c.value ? "var(--accent-4)" : undefined,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <span style={{ width: 14, height: 14, borderRadius: "50%", background: c.value, border: "1px solid var(--border)" }} />
+            {c.label}
+          </button>
+        ))}
       </div>
 
       {mode === "scenes" && (

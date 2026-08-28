@@ -57,7 +57,12 @@ async function googleTranslateTts(text, lang) {
   return Buffer.concat(buffers);
 }
 
-async function elevenLabsTts(text, apiKey, voiceId) {
+// speed: 0.7-1.2 (ElevenLabs' supported range, 1.0 = normal).
+// style: 0-1, how much the model exaggerates the voice's character
+// (0 = flat/stable, 1 = most expressive) — this is the "style" knob
+// ElevenLabs exposes, not a different voice; to actually change voice,
+// pass a different voiceId.
+async function elevenLabsTts(text, apiKey, voiceId, speed, style) {
   const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
     method: "POST",
     headers: {
@@ -68,7 +73,12 @@ async function elevenLabsTts(text, apiKey, voiceId) {
     body: JSON.stringify({
       text,
       model_id: "eleven_multilingual_v2",
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+        style: style ?? 0,
+        speed: clampSpeed(speed),
+      },
     }),
   });
   if (!res.ok) {
@@ -78,23 +88,29 @@ async function elevenLabsTts(text, apiKey, voiceId) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+function clampSpeed(speed) {
+  const n = Number(speed);
+  if (!n || Number.isNaN(n)) return 1.0;
+  return Math.min(1.2, Math.max(0.7, n));
+}
+
 export async function POST(request) {
   let body = {};
   try {
     body = await request.json();
   } catch {}
-  const { text, lang } = body;
+  const { text, lang, speed, style, voiceId: voiceIdOverride } = body;
   if (!text || !text.trim()) {
     return Response.json({ error: "ไม่มีข้อความให้พากย์" }, { status: 400 });
   }
 
   const elevenKey = process.env.ELEVENLABS_API_KEY;
-  const voiceId = process.env.ELEVENLABS_VOICE_ID;
+  const voiceId = voiceIdOverride || process.env.ELEVENLABS_VOICE_ID;
 
   try {
     let buf, provider;
     if (elevenKey && voiceId) {
-      buf = await elevenLabsTts(text, elevenKey, voiceId);
+      buf = await elevenLabsTts(text, elevenKey, voiceId, speed, style);
       provider = "elevenlabs";
     } else {
       buf = await googleTranslateTts(text, lang || "th");

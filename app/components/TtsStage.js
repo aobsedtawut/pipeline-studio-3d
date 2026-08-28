@@ -32,12 +32,23 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
   const [busyAll, setBusyAll] = useState(false);
   const [providerNote, setProviderNote] = useState("");
   const [errMsg, setErrMsg] = useState("");
+  // Voice tuning — only takes effect with ElevenLabs (ELEVENLABS_API_KEY
+  // set); the Google Translate fallback has no speed/style/voice controls.
+  const [speed, setSpeed] = useState(1.0);
+  const [style, setStyle] = useState(0);
+  const [voiceIdOverride, setVoiceIdOverride] = useState("");
 
   async function synthesize(scene) {
     const res = await fetch("/api/tts", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text: scene.voiceover_text, lang: "th" }),
+      body: JSON.stringify({
+        text: scene.voiceover_text,
+        lang: "th",
+        speed,
+        style,
+        voiceId: voiceIdOverride.trim() || undefined,
+      }),
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.error || "render failed");
@@ -103,9 +114,43 @@ export default function TtsStage({ unlocked, scenes, setScenes, onDone, done }) 
       unlocked={unlocked}
     >
       {unlocked && (
-        <button className="btn" onClick={renderAll} disabled={busyAll || scenes.length === 0}>
-          {busyAll ? "กำลังพากย์เสียงทั้งหมด…" : "🔊 พากย์เสียงทุกฉาก"}
-        </button>
+        <>
+          <div className="row" style={{ marginBottom: 4 }}>
+            <div>
+              <label className="field-label">ความเร็วเสียง ({speed.toFixed(2)}x) — ElevenLabs เท่านั้น</label>
+              <input
+                type="range"
+                min={0.7}
+                max={1.2}
+                step={0.05}
+                value={speed}
+                onChange={(e) => setSpeed(Number(e.target.value))}
+              />
+            </div>
+            <div>
+              <label className="field-label">ความมีอารมณ์ ({Math.round(style * 100)}%) — ElevenLabs เท่านั้น</label>
+              <input
+                type="range"
+                min={0}
+                max={1}
+                step={0.1}
+                value={style}
+                onChange={(e) => setStyle(Number(e.target.value))}
+              />
+            </div>
+          </div>
+          <label className="field-label">Voice ID อื่น (ถ้าอยากเปลี่ยนเสียง — ปล่อยว่างใช้ ELEVENLABS_VOICE_ID เดิม)</label>
+          <input
+            type="text"
+            value={voiceIdOverride}
+            onChange={(e) => setVoiceIdOverride(e.target.value)}
+            placeholder="เช่น 21m00Tcm4TlvDq8ikWAM"
+            style={{ marginBottom: 14 }}
+          />
+          <button className="btn" onClick={renderAll} disabled={busyAll || scenes.length === 0}>
+            {busyAll ? "กำลังพากย์เสียงทั้งหมด…" : "🔊 พากย์เสียงทุกฉาก"}
+          </button>
+        </>
       )}
       {providerNote && <div className="hint">{providerNote}</div>}
       {errMsg && <div className="hint warn">{errMsg}</div>}
