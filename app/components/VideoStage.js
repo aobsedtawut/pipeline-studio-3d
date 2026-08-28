@@ -165,6 +165,167 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   const videoBlobRef = useRef(null);
   const rigRef = useRef(null);
 
+  // "scenes" = existing per-scene image/video → 3D template pipeline.
+  // "attach" = drop in one already-edited clip, skip per-scene media
+  // entirely — audio either kept (ducked) from the clip itself, or
+  // swapped out for the Stage 3 voiceover with the clip looping as a
+  // silent background visual.
+  const [mode, setMode] = useState("scenes");
+  const [attachedVideoUrl, setAttachedVideoUrl] = useState(null);
+  const [attachedVideoName, setAttachedVideoName] = useState("");
+  const [audioMode, setAudioMode] = useState("replace"); // "keep" | "replace"
+  const [keepVolume, setKeepVolume] = useState(60);
+  const [useCaptions, setUseCaptions] = useState(true);
+
+  async function onAttachUpload(file) {
+    const dataUrl = await fileToDataUrl(file);
+    setAttachedVideoUrl(dataUrl);
+    setAttachedVideoName(file.name);
+    setVideoUrl(null);
+  }
+
+  async function renderAttachedVideo() {
+    setErrMsg("");
+    setRendering(true);
+    setProgress(0);
+    setVideoUrl(null);
+
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      const audioCtx = new AudioCtx();
+
+      const video = document.createElement("video");
+      video.src = attachedVideoUrl;
+      video.playsInline = true;
+      video.muted = audioMode === "replace";
+      video.loop = audioMode === "replace";
+      await new Promise((resolve, reject) => {
+        video.onloadedmetadata = resolve;
+        video.onerror = reject;
+      });
+
+      const dest = audioCtx.createMediaStreamDestination();
+      let totalDuration;
+      const sceneStarts = [];
+      const sceneDurs = [];
+
+      if (audioMode === "replace") {
+        const audioBuffers = await Promise.all(
+          scenes.map(async (s) => {
+            const resp = await fetch(s.audioDataUrl);
+            const arr = await resp.arrayBuffer();
+            return audioCtx.decodeAudioData(arr.slice(0));
+          })
+        );
+        let t = 0;
+        audioBuffers.forEach((b) => {
+          sceneStarts.push(t);
+          sceneDurs.push(b.duration);
+          t += b.duration;
+        });
+        totalDuration = t;
+
+        const clockStart0 = audioCtx.currentTime + 0.25;
+        audioBuffers.forEach((buf, i) => {
+          const src = audioCtx.createBufferSource();
+          src.buffer = buf;
+          src.connect(dest);
+          src.start(clockStart0 + sceneStarts[i]);
+        });
+      } else {
+        // Keep the clip's own audio, ducked to keepVolume, playing once
+        // at its natural length. Captions (if any) are spread across
+        // that length proportional to each scene's script-voiceover
+        // duration, since there's no per-scene audio driving timing here.
+        totalDuration = video.duration;
+        const weights = scenes.map((s) => s.audioDuration || 1);
+        const totalWeight = weights.reduce((a, b) => a + b, 0) || 1;
+        let t = 0;
+        weights.forEach((w) => {
+          const dur = (w / totalWeight) * totalDuration;
+          sceneStarts.push(t);
+          sceneDurs.push(dur);
+          t += dur;
+        });
+
+        const srcNode = audioCtx.createMediaElementSource(video);
+        const gain = audioCtx.createGain();
+        gain.gain.value = keepVolume / 100;
+        srcNode.connect(gain);
+        gain.connect(dest);
+      }
+
+      const compositeCanvas = document.createElement("canvas");
+      compositeCanvas.width = W;
+      compositeCanvas.height = H;
+      const ctx = compositeCanvas.getContext("2d");
+
+      const videoStream = compositeCanvas.captureStream(30);
+      const combined = new MediaStream([...videoStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+      const mimeType = MediaRecorder.isTypeSupported("video/webm;codecs=vp9,opus")
+        ? "video/webm;codecs=vp9,opus"
+        : "video/webm";
+      const recorder = new MediaRecorder(combined, { mimeType, videoBitsPerSecond: 6_000_000 });
+      const chunks = [];
+      recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+      const stopped = new Promise((res) => (recorder.onstop = res));
+
+      const clockStart = audioCtx.currentTime + 0.25;
+      video.currentTime = 0;
+      await video.play().catch(() => {});
+      recorder.start();
+
+      await new Promise((resolve) => {
+        function draw() {
+          const now = audioCtx.currentTime - clockStart;
+          if (now >= totalDuration + 0.15) {
+            recorder.stop();
+            video.pause();
+            resolve();
+            return;
+          }
+
+          ctx.fillStyle = "#000";
+          ctx.fillRect(0, 0, W, H);
+
+          const iw = video.videoWidth, ih = video.videoHeight;
+          const targetAR = W / H;
+          let dw, dh;
+          if (iw / ih > targetAR) { dh = H; dw = dh * (iw / ih); }
+          else { dw = W; dh = dw * (ih / iw); }
+          const dx = (W - dw) / 2, dy = (H - dh) / 2;
+          ctx.drawImage(video, dx, dy, dw, dh);
+
+          if (useCaptions && sceneStarts.length) {
+            let idx = 0;
+            for (let i = 0; i < sceneStarts.length; i++) if (now >= sceneStarts[i]) idx = i;
+            const s = scenes[idx];
+            const sceneStart = sceneStarts[idx];
+            const sceneDur = sceneDurs[idx];
+            const localT = clamp(now - sceneStart, 0, sceneDur);
+            const fadeIn = clamp(localT / 0.25, 0, 1);
+            const fadeOut = clamp((sceneDur - localT) / 0.3, 0, 1);
+            const capAlpha = Math.min(fadeIn, fadeOut);
+            if (s) drawCaption(ctx, s.caption_text, capAlpha, 20 * (1 - fadeIn));
+          }
+
+          setProgress(now / totalDuration);
+          requestAnimationFrame(draw);
+        }
+        requestAnimationFrame(draw);
+      });
+
+      await stopped;
+      const blob = new Blob(chunks, { type: "video/webm" });
+      videoBlobRef.current = blob;
+      setVideoUrl(URL.createObjectURL(blob));
+    } catch (e) {
+      setErrMsg("เรนเดอร์วิดีโอไม่สำเร็จ: " + String(e.message || e));
+    } finally {
+      setRendering(false);
+    }
+  }
+
   async function onMediaUpload(i, file) {
     const dataUrl = await fileToDataUrl(file);
     const isVideo = file.type.startsWith("video/");
@@ -362,50 +523,146 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
       character="video"
       accent="--accent-4"
       title="ตัดต่อวิดีโอ + ซับไตเติล (3D Templates)"
-      sub="อัปโหลดภาพหรือวิดีโอต่อฉาก เลือกเทมเพลต แล้วเรนเดอร์วิดีโอในเบราว์เซอร์ของคุณเอง (ไม่ต้องรอเซิร์ฟเวอร์)"
+      sub="อัปโหลดภาพหรือวิดีโอต่อฉากแล้วเรนเดอร์จากเทมเพลต 3D หรือแนบวิดีโอที่ตัดต่อมาแล้ว 1 คลิปแทนก็ได้ — ทั้งหมดเรนเดอร์ในเบราว์เซอร์ของคุณเอง"
       unlocked={unlocked}
     >
-      {scenes.map((s, i) => (
-        <div className="scene-card" key={s.scene_id}>
-          <div className="scene-card-head">
-            <span className="scene-badge">ฉาก {s.scene_id}</span>
-            <span className="scene-dur">{s.audioDuration ? s.audioDuration.toFixed(1) + "s" : "-"}</span>
-          </div>
-          <div className="row" style={{ marginTop: 10 }}>
-            <div>
-              <label className="field-label">ภาพประกอบ / วิดีโอ</label>
-              <input
-                type="file"
-                accept="image/*,video/*"
-                onChange={(e) => e.target.files[0] && onMediaUpload(i, e.target.files[0])}
-              />
-              {s.mediaKind === "video" && s.videoDataUrl && (
-                <video src={s.videoDataUrl} muted loop autoPlay style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
-              )}
-              {s.mediaKind !== "video" && s.imageDataUrl && (
-                <img src={s.imageDataUrl} alt="" style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
-              )}
-            </div>
-            <div>
-              <label className="field-label">เทมเพลต</label>
-              <select value={s.template || "kenburns"} onChange={(e) => setTemplate(i, e.target.value)}>
-                {SCENE_TEMPLATES.map((t) => (
-                  <option key={t.id} value={t.id}>{t.label}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-        </div>
-      ))}
+      <div className="flex gap-2" style={{ marginBottom: 16 }}>
+        <button
+          type="button"
+          className="btn small secondary"
+          style={mode === "scenes" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+          onClick={() => setMode("scenes")}
+        >
+          🎬 ต่อฉากจากรูป/เทมเพลต
+        </button>
+        <button
+          type="button"
+          className="btn small secondary"
+          style={mode === "attach" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+          onClick={() => setMode("attach")}
+        >
+          📎 แนบวิดีโอที่ตัดต่อแล้ว
+        </button>
+      </div>
 
-      {unlocked && (
-        <div style={{ marginTop: 18 }}>
-          <button className="btn" onClick={renderVideo} disabled={!allImagesReady || rendering}>
-            {rendering ? `กำลังเรนเดอร์… ${(progress * 100).toFixed(0)}%` : "🎬 เรนเดอร์วิดีโอ"}
-          </button>
-          {!allImagesReady && <div className="hint">อัปโหลดภาพหรือวิดีโอให้ครบทุกฉากก่อน</div>}
-          {rendering && (
-            <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
+      {mode === "scenes" && (
+        <>
+          {scenes.map((s, i) => (
+            <div className="scene-card" key={s.scene_id}>
+              <div className="scene-card-head">
+                <span className="scene-badge">ฉาก {s.scene_id}</span>
+                <span className="scene-dur">{s.audioDuration ? s.audioDuration.toFixed(1) + "s" : "-"}</span>
+              </div>
+              <div className="row" style={{ marginTop: 10 }}>
+                <div>
+                  <label className="field-label">ภาพประกอบ / วิดีโอ</label>
+                  <input
+                    type="file"
+                    accept="image/*,video/*"
+                    onChange={(e) => e.target.files[0] && onMediaUpload(i, e.target.files[0])}
+                  />
+                  {s.mediaKind === "video" && s.videoDataUrl && (
+                    <video src={s.videoDataUrl} muted loop autoPlay style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
+                  )}
+                  {s.mediaKind !== "video" && s.imageDataUrl && (
+                    <img src={s.imageDataUrl} alt="" style={{ width: 90, marginTop: 8, borderRadius: 8 }} />
+                  )}
+                </div>
+                <div>
+                  <label className="field-label">เทมเพลต</label>
+                  <select value={s.template || "kenburns"} onChange={(e) => setTemplate(i, e.target.value)}>
+                    {SCENE_TEMPLATES.map((t) => (
+                      <option key={t.id} value={t.id}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {unlocked && (
+            <div style={{ marginTop: 18 }}>
+              <button className="btn" onClick={renderVideo} disabled={!allImagesReady || rendering}>
+                {rendering ? `กำลังเรนเดอร์… ${(progress * 100).toFixed(0)}%` : "🎬 เรนเดอร์วิดีโอ"}
+              </button>
+              {!allImagesReady && <div className="hint">อัปโหลดภาพหรือวิดีโอให้ครบทุกฉากก่อน</div>}
+              {rendering && (
+                <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+
+      {mode === "attach" && (
+        <div className="scene-card">
+          <label className="field-label">วิดีโอที่ตัดต่อมาแล้ว (1 ไฟล์)</label>
+          <input
+            type="file"
+            accept="video/*"
+            onChange={(e) => e.target.files[0] && onAttachUpload(e.target.files[0])}
+          />
+          {attachedVideoUrl && (
+            <video src={attachedVideoUrl} muted controls style={{ width: 160, marginTop: 8, borderRadius: 8 }} />
+          )}
+
+          <label className="field-label" style={{ marginTop: 14 }}>เสียงในคลิป</label>
+          <div className="flex gap-2 flex-wrap">
+            <button
+              type="button"
+              className="btn small secondary"
+              style={audioMode === "replace" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+              onClick={() => setAudioMode("replace")}
+            >
+              🎙️ ตัดเสียงเดิม ใช้เสียงพากย์จาก Stage 3 แทน
+            </button>
+            <button
+              type="button"
+              className="btn small secondary"
+              style={audioMode === "keep" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+              onClick={() => setAudioMode("keep")}
+            >
+              🔊 เก็บเสียงเดิม (ลดระดับเสียง)
+            </button>
+          </div>
+          {audioMode === "replace" && (
+            <div className="hint">คลิปจะวนซ้ำเป็นพื้นหลังเงียบๆ ความยาวเท่าเสียงพากย์รวมจากทุกฉาก</div>
+          )}
+          {audioMode === "keep" && (
+            <>
+              <label className="field-label">ระดับเสียงเดิม ({keepVolume}%)</label>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={keepVolume}
+                onChange={(e) => setKeepVolume(Number(e.target.value))}
+              />
+              <div className="hint">ความยาววิดีโอเท่าคลิปต้นฉบับ ไม่วนซ้ำ</div>
+            </>
+          )}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14 }}>
+            <input
+              type="checkbox"
+              checked={useCaptions}
+              onChange={(e) => setUseCaptions(e.target.checked)}
+              disabled={scenes.length === 0}
+            />
+            ใส่ซับจากสคริปต์ (Stage 2)
+          </label>
+          {scenes.length === 0 && <div className="hint">ยังไม่มีสคริปต์ — ข้ามไปก่อนได้ หรือย้อนไปทำ Stage 2</div>}
+
+          {unlocked && (
+            <div style={{ marginTop: 18 }}>
+              <button className="btn" onClick={renderAttachedVideo} disabled={!attachedVideoUrl || rendering}>
+                {rendering ? `กำลังเรนเดอร์… ${(progress * 100).toFixed(0)}%` : "🎬 เรนเดอร์วิดีโอ"}
+              </button>
+              {!attachedVideoUrl && <div className="hint">แนบวิดีโอก่อน</div>}
+              {rendering && (
+                <div className="progress-bar"><div className="progress-bar-fill" style={{ width: `${progress * 100}%` }} /></div>
+              )}
+            </div>
           )}
         </div>
       )}
