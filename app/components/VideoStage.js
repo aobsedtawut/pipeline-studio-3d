@@ -4,7 +4,32 @@ import { useRef, useState } from "react";
 import { SCENE_TEMPLATES, ZOOM_FROM, ZOOM_TO, clamp } from "../lib/pipeline";
 import Stage from "./Stage";
 
-const W = 1080, H = 1920;
+// Reassigned per render by applyAspectRatio() before anything (canvas,
+// Three.js rig, caption layout) is created — every function below reads
+// these as a live module-scope binding, so one reassignment before a
+// render call is enough to retarget the whole pipeline.
+let W = 1080, H = 1920;
+
+const ASPECT_RATIOS = [
+  { value: "9:16", label: "9:16 (แนวตั้ง)" },
+  { value: "16:9", label: "16:9 (แนวนอน)" },
+  { value: "original", label: "ตามต้นฉบับ" },
+];
+
+// sourceWidth/sourceHeight only matter for "original" — the natural size
+// of the first scene's media (scenes mode) or the attached clip (attach
+// mode). Long edge capped at 1920 to keep render time/file size sane.
+function applyAspectRatio(ratio, sourceWidth, sourceHeight) {
+  if (ratio === "16:9") {
+    W = 1920; H = 1080;
+  } else if (ratio === "original" && sourceWidth && sourceHeight) {
+    const ar = sourceWidth / sourceHeight;
+    if (ar >= 1) { W = 1920; H = Math.round(1920 / ar); }
+    else { H = 1920; W = Math.round(1920 * ar); }
+  } else {
+    W = 1080; H = 1920;
+  }
+}
 
 async function fileToDataUrl(file) {
   return new Promise((resolve, reject) => {
@@ -184,6 +209,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   const [keepVolume, setKeepVolume] = useState(60);
   const [useCaptions, setUseCaptions] = useState(true);
   const [captionColor, setCaptionColor] = useState("#ffffff");
+  const [aspectRatio, setAspectRatio] = useState("9:16");
   // Covers (doesn't remove — true removal needs AI video inpainting, not
   // available here) a fixed band of the attached clip, for hiding
   // burned-in text/watermarks that came with the source video.
@@ -218,6 +244,7 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
         video.onloadedmetadata = resolve;
         video.onerror = reject;
       });
+      applyAspectRatio(aspectRatio, video.videoWidth, video.videoHeight);
 
       const dest = audioCtx.createMediaStreamDestination();
       let totalDuration;
@@ -384,6 +411,12 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
       const audioCtx = new AudioCtx();
 
       const media = await loadSceneMedia(scenes);
+      if (aspectRatio === "original" && media[0]) {
+        const { kind, el } = media[0];
+        applyAspectRatio("original", kind === "video" ? el.videoWidth : el.width, kind === "video" ? el.videoHeight : el.height);
+      } else {
+        applyAspectRatio(aspectRatio);
+      }
       const audioBuffers = await Promise.all(
         scenes.map(async (s) => {
           const resp = await fetch(s.audioDataUrl);
@@ -564,6 +597,21 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
         >
           📎 แนบวิดีโอที่ตัดต่อแล้ว
         </button>
+      </div>
+
+      <label className="field-label">อัตราส่วนวิดีโอ</label>
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: 16 }}>
+        {ASPECT_RATIOS.map((r) => (
+          <button
+            key={r.value}
+            type="button"
+            className="btn small secondary"
+            onClick={() => setAspectRatio(r.value)}
+            style={aspectRatio === r.value ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+          >
+            {r.label}
+          </button>
+        ))}
       </div>
 
       <label className="field-label">สีตัวอักษรซับ</label>
