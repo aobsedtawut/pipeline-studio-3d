@@ -184,6 +184,13 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
   const [keepVolume, setKeepVolume] = useState(60);
   const [useCaptions, setUseCaptions] = useState(true);
   const [captionColor, setCaptionColor] = useState("#ffffff");
+  // Covers (doesn't remove — true removal needs AI video inpainting, not
+  // available here) a fixed band of the attached clip, for hiding
+  // burned-in text/watermarks that came with the source video.
+  const [coverOld, setCoverOld] = useState(false);
+  const [coverPosition, setCoverPosition] = useState("bottom"); // "top" | "bottom"
+  const [coverHeightPct, setCoverHeightPct] = useState(15);
+  const [coverColor, setCoverColor] = useState("#000000");
 
   async function onAttachUpload(file) {
     const dataUrl = await fileToDataUrl(file);
@@ -303,6 +310,12 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
           else { dw = W; dh = dw * (ih / iw); }
           const dx = (W - dw) / 2, dy = (H - dh) / 2;
           ctx.drawImage(video, dx, dy, dw, dh);
+
+          if (coverOld) {
+            const bandH = H * (coverHeightPct / 100);
+            ctx.fillStyle = coverColor;
+            ctx.fillRect(0, coverPosition === "top" ? 0 : H - bandH, W, bandH);
+          }
 
           if (useCaptions && sceneStarts.length) {
             let idx = 0;
@@ -633,6 +646,76 @@ export default function VideoStage({ unlocked, scenes, setScenes, onDone, done }
           />
           {attachedVideoUrl && (
             <video src={attachedVideoUrl} muted controls style={{ width: 160, marginTop: 8, borderRadius: 8 }} />
+          )}
+
+          <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 14 }}>
+            <input type="checkbox" checked={coverOld} onChange={(e) => setCoverOld(e.target.checked)} />
+            บังข้อความ/ซับเดิมที่ติดมากับคลิป
+          </label>
+          <div className="hint">
+            ปิดทับด้วยแถบสี ไม่ใช่การลบข้อความจริง — ใช้ได้ผลถ้าตำแหน่งข้อความเดิมอยู่คงที่ตลอดคลิป (เช่น แถบล่างหรือแถบบน)
+          </div>
+          {coverOld && (
+            <div className="row" style={{ marginTop: 8 }}>
+              <div>
+                <label className="field-label">ตำแหน่ง</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    className="btn small secondary"
+                    style={coverPosition === "top" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+                    onClick={() => setCoverPosition("top")}
+                  >
+                    บน
+                  </button>
+                  <button
+                    type="button"
+                    className="btn small secondary"
+                    style={coverPosition === "bottom" ? { borderColor: "var(--accent-4)", color: "var(--accent-4)" } : undefined}
+                    onClick={() => setCoverPosition("bottom")}
+                  >
+                    ล่าง
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="field-label">ความสูงแถบ ({coverHeightPct}%)</label>
+                <input
+                  type="range"
+                  min={5}
+                  max={40}
+                  value={coverHeightPct}
+                  onChange={(e) => setCoverHeightPct(Number(e.target.value))}
+                />
+              </div>
+            </div>
+          )}
+          {coverOld && (
+            <>
+              <label className="field-label">สีแถบ</label>
+              <div className="flex gap-2">
+                {[
+                  { label: "ดำ", value: "#000000" },
+                  { label: "ขาว", value: "#ffffff" },
+                ].map((c) => (
+                  <button
+                    key={c.value}
+                    type="button"
+                    className="btn small secondary"
+                    onClick={() => setCoverColor(c.value)}
+                    style={{
+                      borderColor: coverColor === c.value ? "var(--accent-4)" : undefined,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                    }}
+                  >
+                    <span style={{ width: 14, height: 14, borderRadius: "50%", background: c.value, border: "1px solid var(--border)" }} />
+                    {c.label}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
 
           <label className="field-label" style={{ marginTop: 14 }}>เสียงในคลิป</label>
