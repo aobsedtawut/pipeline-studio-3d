@@ -32,7 +32,7 @@ Style: ${style === "punchy" ? "punchy, fragment-style, short phrases" : "narrati
 
 Current scenes (JSON): ${JSON.stringify(scenes)}
 
-Rewrite each scene's "voiceover_text" and "caption_text" to be more natural, credible Thai (not exaggerated clickbait), keeping the same scene_id/start_sec/end_sec/template values unchanged. Respond with ONLY a JSON array of scene objects, no prose, no markdown fences.`;
+Rewrite each scene's "voiceover_text" to be more natural, credible Thai (not exaggerated clickbait), keeping the same scene_id/start_sec/end_sec/template values unchanged. Set "caption_text" to the EXACT same string as "voiceover_text" for every scene — the on-screen caption must match the spoken line word-for-word, no shortened or separate caption copy. Respond with ONLY a JSON array of scene objects, no prose, no markdown fences.`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {

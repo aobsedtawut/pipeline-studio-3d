@@ -18,24 +18,26 @@ export function buildTemplateScript({ productName, points, durationTarget, style
   const bodyBullets = bullets.length ? bullets : [productName];
   const perScene = Math.max(3, Math.floor(durationTarget / (bodyBullets.length + 2)));
 
+  // Caption on screen matches the voiceover word-for-word — no separate,
+  // shortened caption copy.
   const scenes = [];
   let t = 0;
-  const addScene = (text, caption) => {
+  const addScene = (text) => {
     const dur = Math.max(3, Math.min(14, perScene));
     scenes.push({
       scene_id: scenes.length + 1,
       start_sec: t,
       end_sec: t + dur,
       voiceover_text: text,
-      caption_text: caption,
+      caption_text: text,
       template: "kenburns",
     });
     t += dur;
   };
 
-  addScene(hook, style === "punchy" ? "ปัญหาที่เจอบ่อย" : "ปัญหาที่ทุกคนเจอ");
-  bodyBullets.forEach((b) => addScene(b, b.length > 24 ? b.slice(0, 24) + "…" : b));
-  addScene(cta, "กดลิงก์ช้อปเลย");
+  addScene(hook);
+  bodyBullets.forEach((b) => addScene(b));
+  addScene(cta);
 
   return { hook, cta, scenes, target_duration_sec: durationTarget };
 }
