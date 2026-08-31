@@ -10,6 +10,9 @@ export default function Topbar({ onLoadRun }) {
     <header className="topbar">
       <span className="topbar-title">Pipeline Studio</span>
       <div className="topbar-actions">
+        <a className="btn secondary small" href="/post-reel">
+          📹 โพสต์ Reel
+        </a>
         <HistoryDrawer onLoad={onLoadRun} />
         {session?.user && (
           <div className="topbar-user">

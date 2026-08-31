@@ -58,6 +58,8 @@ Anyone not on `ALLOWED_EMAILS` gets rejected at sign-in with an "ไม่ได
 | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` | required — no fallback — the Stage 7 Facebook Page post button will not work without these |
 | `DATABASE_URL` | run history/resume (the "History" drawer + autosave) is disabled — the pipeline itself still works fully client-side without it |
 | `TIKTOK_APP_KEY` + `TIKTOK_APP_SECRET` | Stage 1's TikTok Shop search tab shows a "not configured" error — Shopee search and manual entry still work |
+| `FB_USER_ACCESS_TOKEN` | `/post-reel` (post a full video as a Reel to any page you manage) shows a "not configured" error — Stage 7's text+image post is unaffected |
+| `BLOB_READ_WRITE_TOKEN` | `/post-reel`'s video upload fails — this one's usually set automatically once a Blob store is connected in the Vercel dashboard, see below |
 
 ## Database (optional, except for TikTok Shop)
 
@@ -101,10 +103,39 @@ static env var).
 
 **Lazada:** no official Lazada affiliate/offer-search API exists (checked directly against Lazada Open Platform's docs — every category there is seller-inventory-management, nothing affiliate-facing). Use the "กรอกเอง" manual-entry tab for Lazada products instead.
 
+## Post a Reel (`/post-reel`)
+
+A separate page (not part of the numbered pipeline stages) for posting a
+finished video straight to Facebook as a **Reel**, on any Page you
+administer — verified live against Facebook's
+[Reels publishing docs](https://developers.facebook.com/docs/video-api/guides/reels-publishing).
+Unlike Stage 7 (text + cover image, one fixed page), this posts the actual
+video and lets you pick which page per-post.
+
+**How it avoids Vercel's ~4.5MB request body limit:** the video uploads
+directly from your browser to Vercel Blob storage (never passing through a
+serverless function), then the server just hands Facebook that file's
+public URL — Facebook fetches the bytes itself.
+
+Setup:
+
+1. **Vercel Blob** — in your Vercel project: Storage tab → Create Database → Blob. This sets `BLOB_READ_WRITE_TOKEN` automatically; run `vercel env pull` to get it locally too.
+2. **Facebook user token** — one token covers every page you manage (no per-page setup):
+   - Open [Graph API Explorer](https://developers.facebook.com/tools/explorer), select your app.
+   - Request permissions: `pages_show_list`, `pages_read_engagement`, `pages_manage_posts`.
+   - Generate the token, then use the **"Extend Access Token"** button (in the Explorer's settings) so it doesn't expire in an hour.
+   - Set `FB_USER_ACCESS_TOKEN` to that value.
+3. Open `/post-reel` (linked from the top bar) — it lists every page the token has access to via `GET /me/accounts`, no hardcoded page IDs.
+
+**Video format:** Facebook recommends `.mp4`, 9:16, 1080×1920, 3–90 seconds — Pipeline Studio's own renderer currently outputs `.webm` (VP9/Opus), which is a supported codec per Facebook's spec but not the recommended container. If an upload gets rejected, convert to `.mp4` first (see the "9:16/.mov" discussion in project notes for why the in-browser renderer can't produce `.mp4`/`.mov` directly).
+
+**Standard Access, no App Review needed** — same as Stage 7's Page posting, as long as your Facebook account has an admin/editor role on both the Page(s) and the Meta app itself. This breaks down (needs Advanced Access + review) only if you ever post to a Page you don't personally manage.
+
 ## Known gaps (see PROJECT NOTES below)
 
-- Facebook video upload is not implemented (text + cover image only); download the rendered `.webm` and post the video manually.
+- Stage 7's Facebook post is text + cover image only (no video) — use `/post-reel` above for full-video posting instead.
 - No automatic `.webm` → `.mp4` transcode.
 - The client-side 3D video renderer (`app/components/VideoStage.js`) has not been runtime-verified in an actual browser as of this commit — test all 7 stages after deploying and report any console errors.
 - Stage 1 (`app/api/product-search/route.js`) ports the Shopee Affiliate Open API auth scheme and GraphQL field names from memory, not a live schema pull — verify against your Shopee Affiliate Open API dashboard if it errors.
 - TikTok Shop's link-generation response shape is unverified — see the caveat above.
+- `/post-reel` was built against Facebook's live Reels API docs (endpoints/params/permissions all verified by fetching the actual doc pages), but the full 3-phase flow has not been runtime-tested end-to-end against a real Page — report back if any phase errors unexpectedly.

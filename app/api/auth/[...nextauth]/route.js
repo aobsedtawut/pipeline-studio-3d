@@ -1,30 +1,6 @@
 import NextAuth from "next-auth";
-import GoogleProvider from "next-auth/providers/google";
+import { authOptions } from "../../../lib/authOptions";
 
-// Access is gated to a fixed email allowlist — this is a single-owner tool,
-// not a public sign-up app. Defaults to the owner's own email if
-// ALLOWED_EMAILS isn't set, so Google login works out of the box for them
-// while still rejecting every other Google account.
-const allowedEmails = (process.env.ALLOWED_EMAILS || "sedtawut.aob@gmail.com")
-  .split(",")
-  .map((e) => e.trim().toLowerCase())
-  .filter(Boolean);
-
-const handler = NextAuth({
-  providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-    }),
-  ],
-  pages: {
-    signIn: "/signin",
-  },
-  callbacks: {
-    async signIn({ user }) {
-      return allowedEmails.includes((user.email || "").toLowerCase());
-    },
-  },
-});
+const handler = NextAuth(authOptions);
 
 export { handler as GET, handler as POST };
