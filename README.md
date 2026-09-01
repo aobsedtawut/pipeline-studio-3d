@@ -58,8 +58,9 @@ Anyone not on `ALLOWED_EMAILS` gets rejected at sign-in with an "ไม่ได
 | `FB_PAGE_ID` + `FB_PAGE_ACCESS_TOKEN` | required — no fallback — the Stage 7 Facebook Page post button will not work without these |
 | `DATABASE_URL` | run history/resume (the "History" drawer + autosave) is disabled — the pipeline itself still works fully client-side without it |
 | `TIKTOK_APP_KEY` + `TIKTOK_APP_SECRET` | Stage 1's TikTok Shop search tab shows a "not configured" error — Shopee search and manual entry still work |
-| `FB_USER_ACCESS_TOKEN` | `/post-reel` (post a full video as a Reel to any page you manage) shows a "not configured" error — Stage 7's text+image post is unaffected |
-| `BLOB_READ_WRITE_TOKEN` | `/post-reel`'s video upload fails — this one's usually set automatically once a Blob store is connected in the Vercel dashboard, see below |
+| `FB_USER_ACCESS_TOKEN` | `/post-reel` and `/ads` show a "not configured" error — Stage 7's text+image post is unaffected |
+| `FB_AD_ACCOUNT_ID` | `/ads` (create a draft ad campaign) shows a "not configured" error |
+| `BLOB_READ_WRITE_TOKEN` | `/post-reel` and `/ads` video upload fails — this one's usually set automatically once a Blob store is connected in the Vercel dashboard, see below |
 
 ## Database (optional, except for TikTok Shop)
 
@@ -131,6 +132,34 @@ Setup:
 
 **Standard Access, no App Review needed** — same as Stage 7's Page posting, as long as your Facebook account has an admin/editor role on both the Page(s) and the Meta app itself. This breaks down (needs Advanced Access + review) only if you ever post to a Page you don't personally manage.
 
+## Run a Facebook Ads campaign (`/ads`)
+
+A 2-step wizard (linked from the top bar) that creates a full Campaign →
+Ad Set → Ad Creative → Ad chain via the Marketing API, replicating the
+engagement-objective / Messenger-destination pattern already proven in
+this account's own past campaigns (see `app/api/ads-create/route.js` for
+the exact request shapes — verified against Meta's live API reference
+docs, not guessed).
+
+**The one rule this never breaks: everything is created with `status:
+"PAUSED"`.** No object this route creates is ever set to `ACTIVE` — that
+would start spending real money automatically, which isn't something this
+app will do on its own. After a draft is created, you get a direct link
+into Ads Manager to review it and turn it on yourself.
+
+Setup — reuses `FB_USER_ACCESS_TOKEN` and `BLOB_READ_WRITE_TOKEN` from the
+Reel setup above (Blob store, Graph API Explorer token), plus:
+
+1. Add `ads_management` and `ads_read` to the same token's permissions in Graph API Explorer (alongside the Reel/Page permissions) and re-extend it.
+2. Set `FB_AD_ACCOUNT_ID` to your ad account id (Ads Manager → account dropdown; with or without the `act_` prefix, either works).
+3. **Standard Access is enough for your own ad account** — confirmed against Meta's Marketing API authorization docs — `ads_management`/`ads_read` are granted automatically, no App Review needed (Advanced Access + review is only required for managing *other people's* ad accounts).
+
+Step 1 sets the campaign name, page, daily budget (THB), and audience
+(age range, gender — geography is fixed to Thailand to match past
+campaigns). Step 2 uploads the ad video (same Blob → `file_url` pattern as
+`/post-reel`) and the ad's primary text, shows a summary, then creates
+everything paused in one call.
+
 ## Known gaps (see PROJECT NOTES below)
 
 - Stage 7's Facebook post is text + cover image only (no video) — use `/post-reel` above for full-video posting instead.
@@ -139,3 +168,4 @@ Setup:
 - Stage 1 (`app/api/product-search/route.js`) ports the Shopee Affiliate Open API auth scheme and GraphQL field names from memory, not a live schema pull — verify against your Shopee Affiliate Open API dashboard if it errors.
 - TikTok Shop's link-generation response shape is unverified — see the caveat above.
 - `/post-reel` was built against Facebook's live Reels API docs (endpoints/params/permissions all verified by fetching the actual doc pages), but the full 3-phase flow has not been runtime-tested end-to-end against a real Page — report back if any phase errors unexpectedly.
+- `/ads` was likewise built against Meta's live Marketing API reference docs (campaign/ad set/ad creative/ad field names and enums all verified by fetching the actual doc pages) but not runtime-tested end-to-end against a real ad account — the `billing_event: "IMPRESSIONS"` choice in particular is a reasonable default rather than something pulled from the docs for the `CONVERSATIONS` optimization goal specifically; double-check the created (paused) ad set in Ads Manager before activating anything.

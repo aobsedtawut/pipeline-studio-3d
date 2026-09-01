@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { upload } from "@vercel/blob/client";
 import Logo from "../components/Logo";
+import Topbar from "../components/Topbar";
 
 export default function PostReelPage() {
   const [pages, setPages] = useState([]);
@@ -60,8 +61,10 @@ export default function PostReelPage() {
   }
 
   return (
-    <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+    <>
+      <Topbar />
+      <div style={{ maxWidth: 640, margin: "0 auto", padding: "48px 20px" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
         <span style={{ color: "var(--accent)" }}>
           <Logo size={32} />
         </span>
@@ -121,7 +124,8 @@ export default function PostReelPage() {
             {msg}
           </div>
         )}
+        </div>
       </div>
-    </div>
+    </>
   );
 }
