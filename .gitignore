@@ -23,3 +23,4 @@ yarn-error.log*
 
 # local editor/agent tooling
 .claude/
+.env*
