@@ -156,9 +156,72 @@ Reel setup above (Blob store, Graph API Explorer token), plus:
 
 Step 1 sets the campaign name, page, daily budget (THB), and audience
 (age range, gender — geography is fixed to Thailand to match past
-campaigns). Step 2 uploads the ad video (same Blob → `file_url` pattern as
-`/post-reel`) and the ad's primary text, shows a summary, then creates
-everything paused in one call.
+campaigns), plus a targeting-mode toggle: **Advantage+** (default —
+Meta's own ad ranking widens the audience beyond the baseline for you) or
+**manual** (locks to exactly the age/gender you set). Step 2 uploads the ad
+video (same Blob → `file_url` pattern as `/post-reel`) and the ad's primary
+text, shows a summary, then creates everything paused in one call.
+
+## Ads Dashboard (`/ads/dashboard`)
+
+Read-only performance dashboard — **never creates, edits, or activates
+anything on Facebook**, purely reads and analyzes. Three tabs:
+
+- **📈 Insights** — live spend/CPM/CTR/results per campaign, ad set, or ad
+  (via the Marketing API's `/insights` edge), plus a spend trend line and a
+  "ซิงค์ข้อมูลล่าสุด" button that also pulls edit history (`/activities`)
+  and creative format per ad. Works with just `FB_USER_ACCESS_TOKEN` +
+  `FB_AD_ACCOUNT_ID` — no database required for this tab alone, though
+  history/trends beyond what Facebook itself retains need one (see below).
+- **🧠 Analysis** — sends synced performance data to Claude
+  (`ANTHROPIC_API_KEY`) for a Thai-language blind-spot analysis and
+  next-round recommendations, deliberately shaped around Meta's
+  **Andromeda** ad-ranking system and **Advantage+** best practices rather
+  than generic metric-reading: it specifically flags campaigns edited too
+  often (risks resetting the ad set's Learning Phase), recommends a
+  proven-vs-testing budget split using this account's real spend/results,
+  flags single-format creative (recommends diversifying video/image/
+  carousel), and checks objective/optimization-goal fit against your daily
+  order goal. Every past analysis is kept with a status
+  (generated/reviewed/applied/dismissed) and a note field, so
+  recommendations stay reviewable, not just the latest run.
+- **💰 Profit** — log a product's cost/shipping/COD-fee/selling price per
+  campaign once, and it computes real profit (not just ad ROAS): revenue,
+  COGS, gross profit, ROAS, margin, cost/order, break-even orders. The
+  "orders" figure is pre-filled from Facebook's `results` (for a
+  Messenger-objective campaign, that's *conversations started*, not
+  confirmed sales) but is a plain editable number — override it with your
+  actual confirmed order count for accurate math.
+
+**Requires `DATABASE_URL`** for the Analysis/Profit tabs and for Insights'
+historical trend line — unlike the rest of this app, this feature can't
+fully degrade to database-less, since Facebook's own insights lookback
+window is limited and product-cost/profit history can't be reconstructed
+from Facebook's API at all. The live Insights tab (current spend/CPM/etc.)
+still works with no `DATABASE_URL` set.
+
+Setup — reuses `FB_USER_ACCESS_TOKEN`, `FB_AD_ACCOUNT_ID`, and
+`ANTHROPIC_API_KEY` from the sections above, plus:
+
+1. Run `npx prisma db push` after pulling this feature (adds `AdSnapshot`,
+   `AdEditEvent`, `ProductCost`, `AdAnalysis` tables).
+2. Optional: set `CRON_SECRET` to any random string and Vercel Cron
+   (configured in `vercel.json`) will call `/api/ads-sync` automatically
+   once a day — otherwise just click "ซิงค์ข้อมูลล่าสุด" manually on the
+   Insights tab whenever you want fresh data.
+3. Click "🔄 ซิงค์ข้อมูลล่าสุด" at least once before running an analysis —
+   `/api/ads-analysis` refuses to run (with a clear error) against zero
+   synced data rather than let the model invent plausible-sounding numbers.
+
+**Caveats (verify before relying on them):** the `actions[]` →
+"results" mapping in `app/lib/facebookAds.js`
+(`OPTIMIZATION_GOAL_RESULT_ACTION`) is a best-effort guess for this
+account's CONVERSATIONS/Messenger objective — check it against a real
+`/insights?fields=actions,optimization_goal` response before trusting the
+numbers. The Advantage+ toggle's `targeting_optimization: "expansion_all"`
+field/enum is likewise unverified against a live `v25.0` call. The
+`/activities` edge field names used for edit-history sync are a best-effort
+read of Meta's docs, not a confirmed live response.
 
 ## Known gaps (see PROJECT NOTES below)
 
@@ -169,3 +232,5 @@ everything paused in one call.
 - TikTok Shop's link-generation response shape is unverified — see the caveat above.
 - `/post-reel` was built against Facebook's live Reels API docs (endpoints/params/permissions all verified by fetching the actual doc pages), but the full 3-phase flow has not been runtime-tested end-to-end against a real Page — report back if any phase errors unexpectedly.
 - `/ads` was likewise built against Meta's live Marketing API reference docs (campaign/ad set/ad creative/ad field names and enums all verified by fetching the actual doc pages) but not runtime-tested end-to-end against a real ad account — the `billing_event: "IMPRESSIONS"` choice in particular is a reasonable default rather than something pulled from the docs for the `CONVERSATIONS` optimization goal specifically; double-check the created (paused) ad set in Ads Manager before activating anything.
+- `/ads/dashboard` (Insights/Analysis/Profit) was built against Meta's Marketing API reference docs but not runtime-tested end-to-end against a real ad account — see the Ads Dashboard section's caveats above (results-mapping, Advantage+ field, `/activities` field names) before trusting the numbers it shows.
+- **Messenger message-mining (finding which chat messages actually closed a sale) is intentionally not built.** It would need Graph API `/{page-id}/conversations` access at a scale that likely requires Advanced Access + Meta App Review with a documented Business Use Case (Standard Access, which today's `pages_messaging`/`ads_management` ride on, probably doesn't cover this), plus a written customer-data retention/redaction policy before any message content is read or sent to an LLM. Needs its own policy review before implementation — not scheduled.

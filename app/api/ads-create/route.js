@@ -49,6 +49,7 @@ export async function POST(request) {
     ageMin,
     ageMax,
     genders, // "all" | "male" | "female"
+    targetingMode, // "manual" | "advantage" — optional, defaults to "manual" (today's existing behavior)
     videoUrl,
     message,
   } = body;
@@ -90,6 +91,14 @@ export async function POST(request) {
         age_min: ageMin || 20,
         age_max: ageMax || 65,
         ...(genderCodes.length ? { genders: genderCodes } : {}),
+        // Advantage+ detailed-targeting expansion — lets Meta's own ad
+        // ranking (Andromeda) widen beyond this baseline targeting rather
+        // than fighting it with a narrow manual audience. Additive only:
+        // omitting targetingMode keeps today's exact prior behavior.
+        // NOT yet verified against a live v25.0 call (same caveat as the
+        // billing_event guess above) — if ad set creation ever errors
+        // specifically on this key, check the field/enum name first.
+        ...(targetingMode === "advantage" ? { targeting_optimization: "expansion_all" } : {}),
       },
       status: "PAUSED",
     });

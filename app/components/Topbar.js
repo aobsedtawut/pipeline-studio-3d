@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { href: "/", label: "🚀 Pipeline" },
   { href: "/post-reel", label: "📹 โพสต์ Reel" },
   { href: "/ads", label: "📣 ยิงแอด Facebook" },
+  { href: "/ads/dashboard", label: "📊 Ads Dashboard" },
 ];
 
 // onLoadRun is only meaningful on the home page (it resumes pipeline

@@ -31,3 +31,104 @@ model TikTokAuth {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 }
+
+// Daily per-entity performance snapshot pulled from the Marketing API's
+// /insights edge — the source of truth for trend charts and blind-spot
+// detection over time (Facebook's own lookback window is limited, so this
+// is the only way to keep history). One row per (entityLevel, entityId,
+// snapshotDate); re-syncing an already-synced day just upserts in place.
+model AdSnapshot {
+  id               String   @id @default(cuid())
+  snapshotDate     DateTime
+  entityLevel      String // "campaign" | "adset" | "ad"
+  entityId         String
+  entityName       String
+  campaignId       String
+  campaignName     String
+  adsetId          String?
+  adsetName        String?
+  adId             String?
+  adName           String?
+  objective        String?
+  optimizationGoal String?
+  effectiveStatus  String?
+  creativeFormat   String? // VIDEO | IMAGE | CAROUSEL | ...
+  spend            Float    @default(0)
+  impressions      Int      @default(0)
+  reach            Int      @default(0)
+  clicks           Int      @default(0)
+  frequency        Float?
+  cpm              Float?
+  ctr              Float?
+  cpc              Float?
+  results          Int?
+  resultType       String?
+  costPerResult    Float?
+  rawActions       Json?
+  createdAt        DateTime @default(now())
+
+  @@unique([entityLevel, entityId, snapshotDate])
+  @@index([campaignId, snapshotDate])
+}
+
+// Campaign/ad set/ad edit history pulled from the Marketing API's
+// /activities edge — powers the "editing too often" blind-spot check
+// (frequent edits can reset an ad set's Learning Phase).
+model AdEditEvent {
+  id                  String   @id @default(cuid())
+  entityLevel         String
+  entityId            String
+  entityName          String?
+  campaignId          String?
+  eventType           String
+  translatedEventType String?
+  eventTime           DateTime
+  actorName           String?
+  extraData           Json?
+  fetchedAt           DateTime @default(now())
+
+  @@unique([entityId, eventTime, eventType])
+  @@index([campaignId, eventTime])
+}
+
+// Manually-logged product economics per campaign — Facebook's API has no
+// concept of the user's actual cost/margin, so this is user input, not
+// synced data. One row per campaign (re-saving just updates it).
+model ProductCost {
+  id                       String   @id @default(cuid())
+  campaignId               String   @unique
+  productName              String
+  unitCostTHB              Float
+  packagingShippingCostTHB Float    @default(0)
+  codFeePercent            Float    @default(0)
+  sellingPriceTHB          Float
+  notes                    String?
+  createdAt                DateTime @default(now())
+  updatedAt                DateTime @updatedAt
+}
+
+// A generated AI analysis pass over AdSnapshot/AdEditEvent/ProductCost
+// data — kept as history (not just the latest result) so past
+// recommendations and their logged outcomes stay reviewable.
+model AdAnalysis {
+  id                 String   @id @default(cuid())
+  scopeLevel         String // "account" | "campaign"
+  campaignId         String?
+  analysisDate       DateTime @default(now())
+  lookbackDays       Int      @default(7)
+  dailyOrderGoal     Int?
+  model              String
+  promptVersion      String
+  summary            String
+  healthScore        Int?
+  blindSpots         Json // [{category,severity,title,detail,evidence}]
+  recommendedActions Json // [{category,title,detail,rationale,priority}]
+  budgetPlan         Json?
+  rawResponseText    String
+  status             String   @default("generated") // generated|reviewed|applied|dismissed
+  userNote           String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([campaignId, createdAt])
+}

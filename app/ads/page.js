@@ -12,6 +12,11 @@ const EMPTY_CONFIG = {
   ageMin: 20,
   ageMax: 65,
   genders: "all",
+  // Defaults to Advantage+ expansion per the account's Andromeda-aligned
+  // strategy — Meta's own ranking finds the audience rather than a narrow
+  // manual one. Switchable to "manual" below; either way everything is
+  // still created PAUSED.
+  targetingMode: "advantage",
 };
 
 export default function AdsPage() {
@@ -73,6 +78,7 @@ export default function AdsPage() {
           ageMin: Number(config.ageMin),
           ageMax: Number(config.ageMax),
           genders: config.genders,
+          targetingMode: config.targetingMode,
           videoUrl: blob.url,
           message,
         }),
@@ -184,6 +190,30 @@ export default function AdsPage() {
               ))}
             </div>
             <div className="hint">กลุ่มเป้าหมายพื้นที่ล็อกไว้ที่ประเทศไทย ตรงกับแคมเปญที่เคยยิงมา</div>
+
+            <label className="field-label" style={{ marginTop: 14 }}>
+              รูปแบบการหากลุ่มเป้าหมาย
+            </label>
+            <div className="flex gap-2">
+              {[
+                { value: "advantage", label: "Advantage+ (แนะนำ — ให้ AI หาให้)" },
+                { value: "manual", label: "กำหนดเอง" },
+              ].map((m) => (
+                <button
+                  key={m.value}
+                  type="button"
+                  className="btn small secondary"
+                  style={config.targetingMode === m.value ? { borderColor: "var(--accent-5)", color: "var(--accent-5)" } : undefined}
+                  onClick={() => setField("targetingMode", m.value)}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+            <div className="hint">
+              Advantage+ ให้ระบบของ Meta ขยายกลุ่มเป้าหมายเกินกว่าที่ตั้งไว้ด้านบนเอง — มักได้ผลลัพธ์ดีกว่าการล็อกกลุ่มแคบๆ
+              ด้วยตัวเอง (ไม่ว่าจะเลือกแบบไหน แคมเปญยังถูกสร้างเป็นสถานะหยุดชั่วคราวเสมอ)
+            </div>
 
             <div style={{ marginTop: 18 }}>
               <button className="btn" onClick={() => setStep(2)} disabled={!step1Valid}>
