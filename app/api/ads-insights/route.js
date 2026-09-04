@@ -15,7 +15,7 @@ export async function GET(request) {
   const adAccountId = process.env.FB_AD_ACCOUNT_ID;
   if (!token || !adAccountId) {
     return Response.json(
-      { error: "ยังไม่ได้ตั้งค่า FB_USER_ACCESS_TOKEN / FB_AD_ACCOUNT_ID ใน Environment Variables" },
+      { error: "ยังไม่ได้ตั้งค่า access token FB_USER_ACCESS_TOKEN / FB_AD_ACCOUNT_ID ใน Environment Variables" },
       { status: 400 }
     );
   }
