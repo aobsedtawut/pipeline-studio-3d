@@ -1,6 +1,6 @@
 # Pipeline Studio
 
-One-page content pipeline: script → TTS voiceover → 3D video render → export → post, all in the browser (Next.js 14, App Router). Video rendering runs client-side via Canvas2D + Three.js + Web Audio + MediaRecorder, so it isn't limited by serverless function time limits.
+One-page content pipeline: script → TTS voiceover → 3D video render → export → post, all in the browser (Next.js 16, App Router). Video rendering runs client-side via Canvas2D + Three.js + Web Audio + MediaRecorder, so it isn't limited by serverless function time limits.
 
 ## Push to GitHub
 
@@ -25,7 +25,7 @@ npm install
 npm run dev
 ```
 
-Requires Node 18+.
+Requires Node 20.9+.
 
 ## Auth (required)
 
@@ -231,5 +231,5 @@ read of Meta's docs, not a confirmed live response.
 - TikTok Shop's link-generation response shape is unverified — see the caveat above.
 - `/post-reel` was built against Facebook's live Reels API docs (endpoints/params/permissions all verified by fetching the actual doc pages), but the full 3-phase flow has not been runtime-tested end-to-end against a real Page — report back if any phase errors unexpectedly.
 - `/ads` was likewise built against Meta's live Marketing API reference docs (campaign/ad set/ad creative/ad field names and enums all verified by fetching the actual doc pages) but not runtime-tested end-to-end against a real ad account — the `billing_event: "IMPRESSIONS"` choice in particular is a reasonable default rather than something pulled from the docs for the `CONVERSATIONS` optimization goal specifically; double-check the created (paused) ad set in Ads Manager before activating anything.
-- `/ads/dashboard` (Insights/Analysis/Profit) was built against Meta's Marketing API reference docs but not runtime-tested end-to-end against a real ad account — see the Ads Dashboard section's caveats above (results-mapping, Advantage+ field, `/activities` field names) before trusting the numbers it shows.
+- `/ads/dashboard` Insights has been runtime-tested after login against this account's live Meta data, including campaign loading and REPLIES, MESSAGING_PURCHASE_CONVERSION, and THRUPLAY result mapping. Analysis/Profit write flows and the `/activities` edit-history response still need live end-to-end verification before relying on them operationally.
 - **Messenger message-mining (finding which chat messages actually closed a sale) is intentionally not built.** It would need Graph API `/{page-id}/conversations` access at a scale that likely requires Advanced Access + Meta App Review with a documented Business Use Case (Standard Access, which today's `pages_messaging`/`ads_management` ride on, probably doesn't cover this), plus a written customer-data retention/redaction policy before any message content is read or sent to an LLM. Needs its own policy review before implementation — not scheduled.
