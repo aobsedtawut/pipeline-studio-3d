@@ -11,10 +11,19 @@ export async function GET(request) {
   if (!campaignId) {
     return Response.json({ error: "ต้องระบุ campaignId" }, { status: 400 });
   }
-  const days = Number(searchParams.get("days")) > 0 ? Number(searchParams.get("days")) : 30;
+  const requestedDays = Number(searchParams.get("days"));
+  const days = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.min(Math.floor(requestedDays), 365) : 30;
   const since = searchParams.get("since") ? new Date(searchParams.get("since")) : new Date(Date.now() - days * 86400000);
   const until = searchParams.get("until") ? new Date(searchParams.get("until")) : new Date();
-  const ordersOverride = searchParams.get("ordersOverride") ? Number(searchParams.get("ordersOverride")) : null;
+  const rawOrdersOverride = searchParams.get("ordersOverride");
+  const ordersOverride = rawOrdersOverride === null || rawOrdersOverride === "" ? null : Number(rawOrdersOverride);
+
+  if (Number.isNaN(since.getTime()) || Number.isNaN(until.getTime()) || since > until) {
+    return Response.json({ error: "ช่วงวันที่ไม่ถูกต้อง" }, { status: 400 });
+  }
+  if (ordersOverride !== null && (!Number.isFinite(ordersOverride) || ordersOverride < 0)) {
+    return Response.json({ error: "จำนวนออเดอร์ต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป" }, { status: 400 });
+  }
 
   try {
     const [snapshots, productCost] = await Promise.all([

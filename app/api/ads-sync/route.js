@@ -47,7 +47,8 @@ export async function POST(request) {
   try {
     body = await request.json();
   } catch {}
-  const sinceDaysAgo = Number(body.sinceDaysAgo) > 0 ? Number(body.sinceDaysAgo) : 3;
+  const requestedDays = Number(body.sinceDaysAgo);
+  const sinceDaysAgo = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.min(Math.floor(requestedDays), 90) : 3;
 
   const until = new Date();
   const since = new Date(until.getTime() - sinceDaysAgo * 24 * 60 * 60 * 1000);

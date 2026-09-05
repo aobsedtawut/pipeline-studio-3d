@@ -17,7 +17,8 @@ export async function GET(request) {
   try {
     const { searchParams } = new URL(request.url);
     const campaignId = searchParams.get("campaignId") || undefined;
-    const take = Number(searchParams.get("take")) > 0 ? Number(searchParams.get("take")) : 20;
+    const requestedTake = Number(searchParams.get("take"));
+    const take = Number.isFinite(requestedTake) && requestedTake > 0 ? Math.min(Math.floor(requestedTake), 100) : 20;
     const analyses = await prisma.adAnalysis.findMany({
       where: campaignId ? { campaignId } : {},
       orderBy: { createdAt: "desc" },
@@ -25,8 +26,8 @@ export async function GET(request) {
       select: { id: true, createdAt: true, campaignId: true, summary: true, healthScore: true, status: true },
     });
     return Response.json({ analyses });
-  } catch {
-    return Response.json({ analyses: [] });
+  } catch (e) {
+    return Response.json({ error: "อ่านประวัติการวิเคราะห์ไม่สำเร็จ: " + String(e.message || e) }, { status: 502 });
   }
 }
 
@@ -42,8 +43,10 @@ export async function POST(request) {
   } catch {}
   const scope = body.scope === "campaign" ? "campaign" : "account";
   const campaignId = scope === "campaign" ? body.campaignId : undefined;
-  const lookbackDays = Number(body.lookbackDays) > 0 ? Number(body.lookbackDays) : 7;
-  const dailyOrderGoal = body.dailyOrderGoal ? Number(body.dailyOrderGoal) : null;
+  const requestedLookback = Number(body.lookbackDays);
+  const lookbackDays = Number.isFinite(requestedLookback) && requestedLookback > 0 ? Math.min(Math.floor(requestedLookback), 90) : 7;
+  const requestedGoal = Number(body.dailyOrderGoal);
+  const dailyOrderGoal = Number.isFinite(requestedGoal) && requestedGoal > 0 ? Math.floor(requestedGoal) : null;
 
   if (scope === "campaign" && !campaignId) {
     return Response.json({ error: "ต้องระบุ campaignId เมื่อเลือกวิเคราะห์รายแคมเปญ" }, { status: 400 });

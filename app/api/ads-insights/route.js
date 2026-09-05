@@ -9,6 +9,7 @@ import { fetchInsightRows } from "../../lib/facebookAds";
 import { upsertAdSnapshots } from "../../lib/adSnapshots";
 
 const LEVELS = ["campaign", "adset", "ad"];
+const DATE_PRESETS = new Set(["today", "yesterday", "last_7d", "last_30d"]);
 
 export async function GET(request) {
   const token = process.env.FB_USER_ACCESS_TOKEN;
@@ -23,7 +24,8 @@ export async function GET(request) {
 
   const { searchParams } = new URL(request.url);
   const level = LEVELS.includes(searchParams.get("level")) ? searchParams.get("level") : "campaign";
-  const datePreset = searchParams.get("datePreset") || "last_7d";
+  const requestedDatePreset = searchParams.get("datePreset");
+  const datePreset = DATE_PRESETS.has(requestedDatePreset) ? requestedDatePreset : "last_7d";
   const campaignId = searchParams.get("campaignId") || null;
 
   try {

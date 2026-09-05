@@ -18,6 +18,15 @@ export default function ProfitPanel({ campaigns }) {
   const [roiStatus, setRoiStatus] = useState("idle"); // idle | loading | ok | err
   const [ordersOverride, setOrdersOverride] = useState("");
 
+  function selectCampaign(nextCampaignId) {
+    setCampaignId(nextCampaignId);
+    setCost(EMPTY_COST);
+    setRoi(null);
+    setRoiStatus(nextCampaignId ? "loading" : "idle");
+    setOrdersOverride("");
+    setSaveStatus(null);
+  }
+
   useEffect(() => {
     if (!campaignId) return;
     fetch(`/api/product-costs/${campaignId}`)
@@ -80,7 +89,7 @@ export default function ProfitPanel({ campaigns }) {
   return (
     <div>
       <div className="flex gap-2" style={{ flexWrap: "wrap", alignItems: "center", marginBottom: 16 }}>
-        <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} style={{ maxWidth: 260 }}>
+        <select value={campaignId} onChange={(e) => selectCampaign(e.target.value)} style={{ maxWidth: 260 }}>
           <option value="">เลือกแคมเปญ</option>
           {(campaigns || []).map((c) => (
             <option key={c.id} value={c.id}>

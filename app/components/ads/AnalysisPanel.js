@@ -33,17 +33,20 @@ export default function AnalysisPanel({ campaigns }) {
     } catch {}
   }, [dailyOrderGoal]);
 
-  function loadHistory() {
+  async function loadHistory() {
     setHistoryStatus("loading");
     const params = new URLSearchParams({ take: "20" });
     if (scope === "campaign" && campaignId) params.set("campaignId", campaignId);
-    fetch(`/api/ads-analysis?${params.toString()}`)
-      .then((r) => r.json())
-      .then((d) => {
-        setHistory(d.analyses || []);
-        setHistoryStatus("ok");
-      })
-      .catch(() => setHistoryStatus("err"));
+    try {
+      const res = await fetch(`/api/ads-analysis?${params.toString()}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "โหลดประวัติไม่สำเร็จ");
+      setHistory(data.analyses || []);
+      setHistoryStatus("ok");
+    } catch {
+      setHistory([]);
+      setHistoryStatus("err");
+    }
   }
 
   useEffect(loadHistory, [scope, campaignId]);
