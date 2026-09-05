@@ -34,13 +34,17 @@ function aggregateByEntity(rows, level) {
         impressions: 0,
         clicks: 0,
         results: 0,
+        hasResultsMetric: false,
       });
     }
     const agg = map.get(id);
     agg.spend += r.spend;
     agg.impressions += r.impressions;
     agg.clicks += r.clicks;
-    agg.results += r.results || 0;
+    if (r.results !== null && r.results !== undefined) {
+      agg.results += r.results;
+      agg.hasResultsMetric = true;
+    }
     agg.effectiveStatus = r.effectiveStatus || agg.effectiveStatus;
   }
   return [...map.values()]
@@ -48,7 +52,8 @@ function aggregateByEntity(rows, level) {
       ...a,
       ctr: a.impressions ? (a.clicks / a.impressions) * 100 : null,
       cpm: a.impressions ? (a.spend / a.impressions) * 1000 : null,
-      costPerResult: a.results ? a.spend / a.results : null,
+      results: a.hasResultsMetric ? a.results : null,
+      costPerResult: a.hasResultsMetric && a.results ? a.spend / a.results : null,
     }))
     .sort((a, b) => b.spend - a.spend);
 }

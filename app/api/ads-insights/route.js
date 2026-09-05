@@ -36,12 +36,18 @@ export async function GET(request) {
         acc.spend += r.spend;
         acc.impressions += r.impressions;
         acc.clicks += r.clicks;
-        acc.results += r.results || 0;
+        if (r.results !== null && r.results !== undefined && r.resultType) {
+          acc.results += r.results;
+          acc.resultsByType[r.resultType] = (acc.resultsByType[r.resultType] || 0) + r.results;
+        }
         return acc;
       },
-      { spend: 0, impressions: 0, clicks: 0, results: 0 }
+      { spend: 0, impressions: 0, clicks: 0, results: 0, resultsByType: {} }
     );
-    totals.costPerResult = totals.results ? totals.spend / totals.results : null;
+    const resultTypes = Object.keys(totals.resultsByType);
+    totals.hasMixedResultTypes = resultTypes.length > 1;
+    if (totals.hasMixedResultTypes) totals.results = null;
+    totals.costPerResult = !totals.hasMixedResultTypes && totals.results ? totals.spend / totals.results : null;
 
     // Best-effort history upsert — never lets a DB problem break the live
     // response above.

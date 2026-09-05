@@ -39,29 +39,47 @@ export async function fbGraphGetAllPages(path, params = {}) {
   return all;
 }
 
-// Maps a Marketing API optimization_goal to the actions[] action_type this
-// account's results should be counted from. CONVERSATIONS/Messenger is the
-// pattern already proven in this account's own past campaigns (see
-// ads-create/route.js) — the exact action_type string below is a
-// best-effort guess and MUST be verified against a real /insights call
-// (fields=actions,optimization_goal) before being relied on; see the
-// Phase 1 verification step in the plan.
-export const OPTIMIZATION_GOAL_RESULT_ACTION = {
-  CONVERSATIONS: "onsite_conversion.messaging_conversation_started_7d",
-  LINK_CLICKS: "link_click",
-  LANDING_PAGE_VIEWS: "landing_page_view",
-  OFFSITE_CONVERSIONS: "offsite_conversion.fb_pixel_purchase",
-  REACH: "impression",
-  IMPRESSIONS: "impression",
+// Verified against this account's live v25.0 insights response. Meta returns
+// REPLIES for most Messenger campaigns and MESSAGING_PURCHASE_CONVERSION for
+// campaigns optimized toward orders. Candidate arrays handle older campaigns
+// whose purchase action is reported under a legacy alias.
+export const OPTIMIZATION_GOAL_RESULT_ACTIONS = {
+  CONVERSATIONS: ["onsite_conversion.messaging_conversation_started_7d"],
+  REPLIES: ["onsite_conversion.messaging_conversation_started_7d"],
+  MESSAGING_PURCHASE_CONVERSION: ["onsite_conversion.messaging_order_created_v2", "onsite_conversion.purchase"],
+  LINK_CLICKS: ["link_click"],
+  LANDING_PAGE_VIEWS: ["landing_page_view"],
+  OFFSITE_CONVERSIONS: ["offsite_conversion.fb_pixel_purchase", "omni_purchase"],
 };
 
 export function extractResults(row) {
   const goal = row.optimization_goal;
-  const actionType = OPTIMIZATION_GOAL_RESULT_ACTION[goal];
   const actions = row.actions || [];
-  if (!actionType) return { results: null, resultType: null };
-  const match = actions.find((a) => a.action_type === actionType);
-  return { results: match ? Number(match.value) : 0, resultType: actionType };
+
+  if (goal === "THRUPLAY") {
+    const results = (row.video_thruplay_watched_actions || []).reduce((sum, item) => sum + Number(item.value || 0), 0);
+    return { results, resultType: "video_thruplay_watched_actions" };
+  }
+  if (goal === "REACH") return { results: Number(row.reach || 0), resultType: "reach" };
+  if (goal === "IMPRESSIONS") return { results: Number(row.impressions || 0), resultType: "impressions" };
+
+  let candidates = OPTIMIZATION_GOAL_RESULT_ACTIONS[goal];
+
+  // Some legacy campaigns return the literal "Unknown Optimization Goal"
+  // even though their actions clearly contain Messenger results.
+  if (
+    goal === "Unknown Optimization Goal" &&
+    actions.some((a) => a.action_type === "onsite_conversion.messaging_conversation_started_7d")
+  ) {
+    candidates = ["onsite_conversion.messaging_conversation_started_7d"];
+  }
+  if (!candidates) return { results: null, resultType: null };
+
+  const match = candidates.map((type) => actions.find((a) => a.action_type === type)).find(Boolean);
+  return {
+    results: match ? Number(match.value) : 0,
+    resultType: match?.action_type || candidates[0],
+  };
 }
 
 const INSIGHT_FIELDS = [
@@ -80,6 +98,7 @@ const INSIGHT_FIELDS = [
   "ctr",
   "cpc",
   "actions",
+  "video_thruplay_watched_actions",
   "objective",
   "optimization_goal",
   "date_start",

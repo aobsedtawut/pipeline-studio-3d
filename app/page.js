@@ -35,10 +35,15 @@ const stageListVariants = {
 export default function Page() {
   const [pipeline, dispatch] = useReducer(pipelineReducer, initialPipelineState);
   const { scenes, meta, productDone, scriptDone, ttsDone, videoDone, videoBlob, videoUrl, exportDone } = pipeline;
-  const setScenes = (scenes) => dispatch({ type: "setScenes", scenes });
-  const setMeta = (meta) => dispatch({ type: "setMeta", meta });
+  const setProductMeta = (meta) => dispatch({ type: "setMeta", source: "product", meta });
+  const setScriptMeta = (meta) => dispatch({ type: "setMeta", source: "script", meta });
+  const setScriptScenes = (scenes) => dispatch({ type: "setScenes", source: "script", scenes });
+  const setTtsScenes = (scenes) => dispatch({ type: "setScenes", source: "tts", scenes });
+  const setVideoScenes = (scenes) => dispatch({ type: "setScenes", source: "video", scenes });
   const runIdRef = useRef(null);
   const saveTimerRef = useRef(null);
+  const saveQueueRef = useRef(Promise.resolve());
+  const saveEpochRef = useRef(0);
   const stageRefs = {
     product: useRef(null),
     script: useRef(null),
@@ -63,21 +68,20 @@ export default function Page() {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       const payload = { meta, scenes, stage: STAGE_LABELS[stageIndex] };
-      const req = runIdRef.current
-        ? fetch(`/api/runs/${runIdRef.current}`, {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          })
-        : fetch("/api/runs", {
-            method: "POST",
+      const saveEpoch = saveEpochRef.current;
+      saveQueueRef.current = saveQueueRef.current
+        .then(async () => {
+          if (saveEpoch !== saveEpochRef.current) return;
+          const runId = runIdRef.current;
+          const response = await fetch(runId ? `/api/runs/${runId}` : "/api/runs", {
+            method: runId ? "PATCH" : "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(payload),
           });
-      req
-        .then((r) => r.json())
-        .then((data) => {
-          if (!runIdRef.current && data.run?.id) runIdRef.current = data.run.id;
+          const data = await response.json();
+          if (saveEpoch === saveEpochRef.current && !runIdRef.current && data.run?.id) {
+            runIdRef.current = data.run.id;
+          }
         })
         .catch(() => {});
     }, 800);
@@ -86,6 +90,7 @@ export default function Page() {
   }, [meta, scenes, stageIndex]);
 
   function resumeRun(run) {
+    saveEpochRef.current++;
     runIdRef.current = run.id;
     // Rendered video/export output isn't persisted (blobs don't belong in a
     // JSON column) — media + audio are restored so re-rendering is just one
@@ -123,7 +128,7 @@ export default function Page() {
           <ProductStage
             unlocked={true}
             meta={meta}
-            setMeta={setMeta}
+            setMeta={setProductMeta}
             done={productDone}
             onDone={() => dispatch({ type: "completeStage", stage: "product" })}
           />
@@ -134,9 +139,9 @@ export default function Page() {
             key={meta.productName || "none"}
             unlocked={true}
             scenes={scenes}
-            setScenes={setScenes}
+            setScenes={setScriptScenes}
             meta={meta}
-            setMeta={setMeta}
+            setMeta={setScriptMeta}
             done={scriptDone}
             onDone={() => dispatch({ type: "completeStage", stage: "script" })}
           />
@@ -146,7 +151,7 @@ export default function Page() {
           <TtsStage
             unlocked={scriptDone}
             scenes={scenes}
-            setScenes={setScenes}
+            setScenes={setTtsScenes}
             done={ttsDone}
             onDone={() => dispatch({ type: "completeStage", stage: "tts" })}
           />
@@ -156,7 +161,7 @@ export default function Page() {
           <VideoStage
             unlocked={ttsDone}
             scenes={scenes}
-            setScenes={setScenes}
+            setScenes={setVideoScenes}
             done={videoDone}
             onDone={(blob, url) => {
               dispatch({ type: "videoReady", blob, url });

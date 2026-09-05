@@ -23,6 +23,10 @@ export default function ScriptStage({ unlocked, scenes, setScenes, meta, setMeta
   function updateScene(i, field, value) {
     const next = scenes.slice();
     next[i] = { ...next[i], [field]: value };
+    if (field === "voiceover_text") {
+      delete next[i].audioDataUrl;
+      delete next[i].audioDuration;
+    }
     setScenes(next);
   }
 

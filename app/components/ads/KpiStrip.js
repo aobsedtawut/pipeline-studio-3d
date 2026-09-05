@@ -31,7 +31,14 @@ export default function KpiStrip({ totals }) {
 
   const cards = [
     { key: "spend", icon: "💸", label: "งบที่ใช้", value: totals.spend, decimals: 0, suffix: " ฿" },
-    { key: "results", icon: "🎯", label: "ผลลัพธ์", value: totals.results, decimals: 0 },
+    {
+      key: "results",
+      icon: "🎯",
+      label: "ผลลัพธ์",
+      value: totals.results,
+      textValue: totals.hasMixedResultTypes ? "หลายประเภท" : undefined,
+      decimals: 0,
+    },
     {
       key: "costPerResult",
       icon: "🧮",
@@ -56,7 +63,7 @@ export default function KpiStrip({ totals }) {
             <span className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">{c.label}</span>
           </div>
           <div className="font-[var(--font-display)] font-bold text-xl tabular-nums text-[var(--ink)]">
-            <AnimatedNumber value={c.value} decimals={c.decimals} suffix={c.suffix || ""} />
+            {c.textValue || (c.value === null || c.value === undefined ? "—" : <AnimatedNumber value={c.value} decimals={c.decimals} suffix={c.suffix || ""} />)}
           </div>
         </div>
       ))}

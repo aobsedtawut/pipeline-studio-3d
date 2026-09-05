@@ -13,9 +13,26 @@ export const initialPipelineState = {
 export function pipelineReducer(state, action) {
   switch (action.type) {
     case "setMeta":
+      if (action.source === "product") {
+        return {
+          ...initialPipelineState,
+          meta: action.meta,
+        };
+      }
       return { ...state, meta: action.meta };
-    case "setScenes":
-      return { ...state, scenes: action.scenes };
+    case "setScenes": {
+      const next = { ...state, scenes: action.scenes };
+      if (action.source === "script") {
+        return { ...next, ttsDone: false, videoDone: false, videoBlob: null, videoUrl: null, exportDone: false };
+      }
+      if (action.source === "tts") {
+        return { ...next, ttsDone: false, videoDone: false, videoBlob: null, videoUrl: null, exportDone: false };
+      }
+      if (action.source === "video") {
+        return { ...next, videoDone: false, videoBlob: null, videoUrl: null, exportDone: false };
+      }
+      return next;
+    }
     case "completeStage":
       return { ...state, [`${action.stage}Done`]: true };
     case "videoReady":

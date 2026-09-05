@@ -68,6 +68,7 @@ function AdsDashboardContent() {
       if (campaignId) params.set("campaignId", campaignId);
       return fetchJson(`/api/ads-insights?${params.toString()}`);
     },
+    enabled: tab === "insights",
   });
   const rows = insightsQuery.data?.rows || [];
   const totals = insightsQuery.data?.totals || null;

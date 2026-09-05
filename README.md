@@ -213,12 +213,11 @@ Setup — reuses `FB_USER_ACCESS_TOKEN`, `FB_AD_ACCOUNT_ID`, and
    `/api/ads-analysis` refuses to run (with a clear error) against zero
    synced data rather than let the model invent plausible-sounding numbers.
 
-**Caveats (verify before relying on them):** the `actions[]` →
-"results" mapping in `app/lib/facebookAds.js`
-(`OPTIMIZATION_GOAL_RESULT_ACTION`) is a best-effort guess for this
-account's CONVERSATIONS/Messenger objective — check it against a real
-`/insights?fields=actions,optimization_goal` response before trusting the
-numbers. The Advantage+ toggle's `targeting_optimization: "expansion_all"`
+**Caveats (verify before relying on them):** the `actions[]` → "results"
+mapping in `app/lib/facebookAds.js` has been verified against this account's
+live v25.0 response for REPLIES/Messenger and MESSAGING_PURCHASE_CONVERSION
+campaigns. Re-check it if Meta introduces a new optimization goal or action
+alias. The Advantage+ toggle's `targeting_optimization: "expansion_all"`
 field/enum is likewise unverified against a live `v25.0` call. The
 `/activities` edge field names used for edit-history sync are a best-effort
 read of Meta's docs, not a confirmed live response.

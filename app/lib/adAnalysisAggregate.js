@@ -44,16 +44,21 @@ export function computeAggregates(snapshots, editEvents, productCost) {
       acc.spend += r.spend;
       acc.impressions += r.impressions;
       acc.clicks += r.clicks;
-      acc.results += r.results || 0;
+      if (r.results !== null && r.results !== undefined && r.resultType) {
+        acc.results += r.results;
+        acc.resultsByType[r.resultType] = (acc.resultsByType[r.resultType] || 0) + r.results;
+      }
       return acc;
     },
-    { spend: 0, impressions: 0, clicks: 0, results: 0 }
+    { spend: 0, impressions: 0, clicks: 0, results: 0, resultsByType: {} }
   );
   totals.spend = round2(totals.spend);
-  totals.costPerResult = totals.results ? round2(totals.spend / totals.results) : null;
+  totals.hasMixedResultTypes = Object.keys(totals.resultsByType).length > 1;
+  if (totals.hasMixedResultTypes) totals.results = null;
+  totals.costPerResult = !totals.hasMixedResultTypes && totals.results ? round2(totals.spend / totals.results) : null;
 
   const spendChangePct = firstVsSecondHalfChangePct(baseRows, "spend");
-  const resultsChangePct = firstVsSecondHalfChangePct(baseRows, "results");
+  const resultsChangePct = totals.hasMixedResultTypes ? null : firstVsSecondHalfChangePct(baseRows, "results");
   const trend = {
     spendChangePct,
     resultsChangePct,
