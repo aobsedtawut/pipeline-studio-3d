@@ -181,13 +181,13 @@ function AdsDashboardContent() {
 
         {tab === "analysis" && (
           <div className="stage unlocked">
-            <AnalysisPanel campaigns={campaigns} />
+            <AnalysisPanel campaigns={campaigns} campaignId={campaignId} onCampaignChange={(id) => updateUrl({ campaign: id })} />
           </div>
         )}
 
         {tab === "profit" && (
           <div className="stage unlocked">
-            <ProfitPanel campaigns={campaigns} />
+            <ProfitPanel campaigns={campaigns} campaignId={campaignId} onCampaignChange={(id) => updateUrl({ campaign: id })} />
           </div>
         )}
       </div>

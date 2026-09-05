@@ -11,16 +11,15 @@ function fmt(n, decimals = 0) {
   return Number(n).toLocaleString("th-TH", { maximumFractionDigits: decimals, minimumFractionDigits: decimals });
 }
 
-export default function ProfitPanel({ campaigns }) {
+export default function ProfitPanel({ campaigns, campaignId, onCampaignChange }) {
   const queryClient = useQueryClient();
-  const [campaignId, setCampaignId] = useState("");
   const [days, setDays] = useState(30);
   const [cost, setCost] = useState(EMPTY_COST);
   const [ordersDraft, setOrdersDraft] = useState("");
   const [appliedOrdersOverride, setAppliedOrdersOverride] = useState(null);
 
   function selectCampaign(nextCampaignId) {
-    setCampaignId(nextCampaignId);
+    onCampaignChange(nextCampaignId);
     setCost(EMPTY_COST);
     setOrdersDraft("");
     setAppliedOrdersOverride(null);

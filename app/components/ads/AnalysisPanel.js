@@ -7,10 +7,9 @@ import { fetchJson } from "../../lib/clientApi";
 const SEVERITY_PILL = { high: "status-pill err", medium: "status-pill pending", low: "status-pill ok" };
 const GOAL_STORAGE_KEY = "pipeline-studio:dailyOrderGoal";
 
-export default function AnalysisPanel({ campaigns }) {
+export default function AnalysisPanel({ campaigns, campaignId, onCampaignChange }) {
   const queryClient = useQueryClient();
   const [scope, setScope] = useState("account");
-  const [campaignId, setCampaignId] = useState("");
   const [lookbackDays, setLookbackDays] = useState(7);
   const [dailyOrderGoal, setDailyOrderGoal] = useState(100);
 
@@ -24,7 +23,8 @@ export default function AnalysisPanel({ campaigns }) {
   useEffect(() => {
     try {
       const saved = window.localStorage.getItem(GOAL_STORAGE_KEY);
-      if (saved) setDailyOrderGoal(Number(saved));
+      const parsed = Number(saved);
+      if (Number.isFinite(parsed) && parsed > 0) setDailyOrderGoal(Math.floor(parsed));
     } catch {}
   }, []);
 
@@ -37,8 +37,8 @@ export default function AnalysisPanel({ campaigns }) {
   const historyQuery = useQuery({
     queryKey: ["ads", "analysis", "history", scope, campaignId],
     queryFn: () => {
-    const params = new URLSearchParams({ take: "20" });
-    if (scope === "campaign" && campaignId) params.set("campaignId", campaignId);
+      const params = new URLSearchParams({ take: "20" });
+      if (scope === "campaign" && campaignId) params.set("campaignId", campaignId);
       return fetchJson(`/api/ads-analysis?${params.toString()}`);
     },
     enabled: scope === "account" || Boolean(campaignId),
@@ -70,10 +70,10 @@ export default function AnalysisPanel({ campaigns }) {
     setResult(null);
     try {
       await runMutation.mutateAsync({
-          scope,
-          campaignId: scope === "campaign" ? campaignId : undefined,
-          lookbackDays: Number(lookbackDays),
-          dailyOrderGoal: Number(dailyOrderGoal),
+        scope,
+        campaignId: scope === "campaign" ? campaignId : undefined,
+        lookbackDays: Number(lookbackDays),
+        dailyOrderGoal: Number(dailyOrderGoal),
       });
       setStatus("ok");
     } catch (e) {
@@ -130,13 +130,27 @@ export default function AnalysisPanel({ campaigns }) {
             type="button"
             className="btn small secondary"
             style={scope === s.value ? { borderColor: "var(--accent-5)", color: "var(--accent-5)" } : undefined}
-            onClick={() => setScope(s.value)}
+            onClick={() => {
+              setScope(s.value);
+              setResult(null);
+              setSelected(null);
+            }}
+            disabled={runMutation.isPending}
           >
             {s.label}
           </button>
         ))}
         {scope === "campaign" && (
-          <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} style={{ maxWidth: 220 }}>
+          <select
+            value={campaignId}
+            onChange={(e) => {
+              onCampaignChange(e.target.value);
+              setResult(null);
+              setSelected(null);
+            }}
+            disabled={runMutation.isPending}
+            style={{ maxWidth: 220 }}
+          >
             <option value="">เลือกแคมเปญ</option>
             {(campaigns || []).map((c) => (
               <option key={c.id} value={c.id}>
