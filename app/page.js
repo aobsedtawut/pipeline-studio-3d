@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useReducer, useRef } from "react";
 import { motion } from "motion/react";
 import Hero3D from "./components/Hero3D";
 import PipelineHUD from "./components/PipelineHUD";
@@ -13,6 +13,7 @@ import TtsStage from "./components/TtsStage";
 import VideoStage from "./components/VideoStage";
 import ExportStage from "./components/ExportStage";
 import PostStage from "./components/PostStage";
+import { initialPipelineState, pipelineReducer, pipelineStageIndex } from "./lib/pipelineState";
 
 // One mascot + accent color per stage — matches the character-per-stage
 // mascot shown in each Stage card's badge (see Stage.js).
@@ -32,15 +33,10 @@ const stageListVariants = {
 };
 
 export default function Page() {
-  const [scenes, setScenes] = useState([]);
-  const [meta, setMeta] = useState({});
-  const [productDone, setProductDone] = useState(false);
-  const [scriptDone, setScriptDone] = useState(false);
-  const [ttsDone, setTtsDone] = useState(false);
-  const [videoDone, setVideoDone] = useState(false);
-  const [videoBlob, setVideoBlob] = useState(null);
-  const [videoUrl, setVideoUrl] = useState(null);
-  const [exportDone, setExportDone] = useState(false);
+  const [pipeline, dispatch] = useReducer(pipelineReducer, initialPipelineState);
+  const { scenes, meta, productDone, scriptDone, ttsDone, videoDone, videoBlob, videoUrl, exportDone } = pipeline;
+  const setScenes = (scenes) => dispatch({ type: "setScenes", scenes });
+  const setMeta = (meta) => dispatch({ type: "setMeta", meta });
   const runIdRef = useRef(null);
   const saveTimerRef = useRef(null);
   const stageRefs = {
@@ -56,7 +52,7 @@ export default function Page() {
     stageRefs[key].current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
-  const stageIndex = exportDone ? 5 : videoDone ? 4 : ttsDone ? 3 : scriptDone ? 2 : productDone ? 1 : 0;
+  const stageIndex = pipelineStageIndex(pipeline);
   const totalDuration = scenes.length ? scenes[scenes.length - 1].end_sec : 0;
 
   // Autosave run history (Postgres, optional — silently no-ops without
@@ -91,19 +87,10 @@ export default function Page() {
 
   function resumeRun(run) {
     runIdRef.current = run.id;
-    const restoredScenes = run.scenes || [];
-    setMeta(run.meta || {});
-    setScenes(restoredScenes);
-    setProductDone(!!(run.meta?.chosenProduct || run.meta?.productName));
-    setScriptDone(restoredScenes.length > 0);
-    setTtsDone(restoredScenes.length > 0 && restoredScenes.every((s) => s.audioDataUrl));
     // Rendered video/export output isn't persisted (blobs don't belong in a
     // JSON column) — media + audio are restored so re-rendering is just one
     // click in VideoStage, not redoing the whole pipeline.
-    setVideoDone(false);
-    setVideoBlob(null);
-    setVideoUrl(null);
-    setExportDone(false);
+    dispatch({ type: "resume", run });
   }
 
   return (
@@ -138,7 +125,7 @@ export default function Page() {
             meta={meta}
             setMeta={setMeta}
             done={productDone}
-            onDone={() => setProductDone(true)}
+            onDone={() => dispatch({ type: "completeStage", stage: "product" })}
           />
         </div>
 
@@ -151,7 +138,7 @@ export default function Page() {
             meta={meta}
             setMeta={setMeta}
             done={scriptDone}
-            onDone={() => setScriptDone(true)}
+            onDone={() => dispatch({ type: "completeStage", stage: "script" })}
           />
         </div>
 
@@ -161,7 +148,7 @@ export default function Page() {
             scenes={scenes}
             setScenes={setScenes}
             done={ttsDone}
-            onDone={() => setTtsDone(true)}
+            onDone={() => dispatch({ type: "completeStage", stage: "tts" })}
           />
         </div>
 
@@ -172,9 +159,7 @@ export default function Page() {
             setScenes={setScenes}
             done={videoDone}
             onDone={(blob, url) => {
-              setVideoBlob(blob);
-              setVideoUrl(url);
-              setVideoDone(true);
+              dispatch({ type: "videoReady", blob, url });
             }}
           />
         </div>
@@ -186,7 +171,7 @@ export default function Page() {
             videoUrl={videoUrl}
             duration={totalDuration}
             done={exportDone}
-            onDone={() => setExportDone(true)}
+            onDone={() => dispatch({ type: "completeStage", stage: "export" })}
           />
         </div>
 
