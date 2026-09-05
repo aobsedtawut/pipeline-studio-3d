@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { Suspense } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import Logo from "../../components/Logo";
 import Topbar from "../../components/Topbar";
 import KpiStrip from "../../components/ads/KpiStrip";
@@ -8,6 +10,7 @@ import AdsTable from "../../components/ads/AdsTable";
 import TrendChart from "../../components/ads/TrendChart";
 import AnalysisPanel from "../../components/ads/AnalysisPanel";
 import ProfitPanel from "../../components/ads/ProfitPanel";
+import { fetchJson } from "../../lib/clientApi";
 
 const TABS = [
   { key: "insights", label: "📈 Insights" },
@@ -28,87 +31,63 @@ const DATE_PRESETS = [
   { key: "last_30d", label: "30 วันล่าสุด" },
 ];
 
-export default function AdsDashboardPage() {
-  const [tab, setTab] = useState("insights");
-  const [level, setLevel] = useState("campaign");
-  const [datePreset, setDatePreset] = useState("last_7d");
-  const [campaignId, setCampaignId] = useState("");
-  const [campaigns, setCampaigns] = useState([]);
-  const [campaignsStatus, setCampaignsStatus] = useState("loading");
+function AdsDashboardContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
-  const [status, setStatus] = useState("loading"); // loading | ok | err
-  const [msg, setMsg] = useState("");
-  const [rows, setRows] = useState([]);
-  const [totals, setTotals] = useState(null);
+  const requestedTab = searchParams.get("tab");
+  const requestedLevel = searchParams.get("level");
+  const requestedDate = searchParams.get("date");
+  const tab = TABS.some((item) => item.key === requestedTab) ? requestedTab : "insights";
+  const level = LEVELS.some((item) => item.key === requestedLevel) ? requestedLevel : "campaign";
+  const datePreset = DATE_PRESETS.some((item) => item.key === requestedDate) ? requestedDate : "last_7d";
+  const campaignId = searchParams.get("campaign") || "";
 
-  const [syncStatus, setSyncStatus] = useState(null); // null | syncing | ok | err
-  const [syncMsg, setSyncMsg] = useState("");
-  const insightsRequest = useRef(0);
+  function updateUrl(values) {
+    const next = new URLSearchParams(searchParams.toString());
+    for (const [key, value] of Object.entries(values)) {
+      if (value) next.set(key, value);
+      else next.delete(key);
+    }
+    const query = next.toString();
+    router.push(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }
 
-  async function loadInsights() {
-    const requestId = ++insightsRequest.current;
-    setStatus("loading");
-    try {
+  const campaignsQuery = useQuery({
+    queryKey: ["ads", "campaigns"],
+    queryFn: () => fetchJson("/api/ads-campaigns"),
+  });
+  const campaigns = campaignsQuery.data?.campaigns || [];
+
+  const insightsQuery = useQuery({
+    queryKey: ["ads", "insights", level, datePreset, campaignId],
+    queryFn: () => {
       const params = new URLSearchParams({ level, datePreset });
       if (campaignId) params.set("campaignId", campaignId);
-      const res = await fetch(`/api/ads-insights?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "ดึงข้อมูลไม่สำเร็จ");
-      if (requestId !== insightsRequest.current) return;
-      setRows(data.rows || []);
-      setTotals(data.totals || null);
-      setStatus("ok");
+      return fetchJson(`/api/ads-insights?${params.toString()}`);
+    },
+  });
+  const rows = insightsQuery.data?.rows || [];
+  const totals = insightsQuery.data?.totals || null;
 
-    } catch (e) {
-      if (requestId !== insightsRequest.current) return;
-      setStatus("err");
-      setMsg(String(e.message || e));
-    }
-  }
-
-  useEffect(() => {
-    loadInsights();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [level, datePreset, campaignId]);
-
-  useEffect(() => {
-    let active = true;
-    fetch("/api/ads-campaigns")
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || "โหลดรายชื่อแคมเปญไม่สำเร็จ");
-        return data;
-      })
-      .then((data) => {
-        if (!active) return;
-        setCampaigns(data.campaigns || []);
-        setCampaignsStatus("ok");
-      })
-      .catch(() => {
-        if (!active) return;
-        setCampaigns([]);
-        setCampaignsStatus("err");
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function syncNow() {
-    setSyncStatus("syncing");
-    setSyncMsg("");
-    try {
-      const res = await fetch("/api/ads-sync", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "ซิงค์ไม่สำเร็จ");
-      setSyncStatus("ok");
-      setSyncMsg(`ซิงค์แล้ว ${data.upserted.snapshots} snapshot, ${data.upserted.editEvents} เหตุการณ์แก้ไข`);
-      loadInsights();
-    } catch (e) {
-      setSyncStatus("err");
-      setSyncMsg(String(e.message || e));
-    }
-  }
+  const syncMutation = useMutation({
+    mutationFn: () =>
+      fetchJson("/api/ads-sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["ads", "campaigns"] }),
+        queryClient.invalidateQueries({ queryKey: ["ads", "insights"] }),
+        queryClient.invalidateQueries({ queryKey: ["ads", "analysis"] }),
+        queryClient.invalidateQueries({ queryKey: ["ads", "roi"] }),
+      ]);
+    },
+  });
 
   return (
     <>
@@ -131,7 +110,7 @@ export default function AdsDashboardPage() {
               type="button"
               className="btn small secondary"
               style={tab === t.key ? { borderColor: "var(--accent-5)", color: "var(--accent-5)" } : undefined}
-              onClick={() => setTab(t.key)}
+              onClick={() => updateUrl({ tab: t.key })}
             >
               {t.label}
             </button>
@@ -147,7 +126,7 @@ export default function AdsDashboardPage() {
                   type="button"
                   className="btn small secondary"
                   style={level === l.key ? { borderColor: "var(--accent-5)", color: "var(--accent-5)" } : undefined}
-                  onClick={() => setLevel(l.key)}
+                  onClick={() => updateUrl({ level: l.key })}
                 >
                   {l.label}
                 </button>
@@ -159,13 +138,13 @@ export default function AdsDashboardPage() {
                   type="button"
                   className="btn small secondary"
                   style={datePreset === d.key ? { borderColor: "var(--accent-5)", color: "var(--accent-5)" } : undefined}
-                  onClick={() => setDatePreset(d.key)}
+                  onClick={() => updateUrl({ date: d.key })}
                 >
                   {d.label}
                 </button>
               ))}
               {campaigns.length > 0 && (
-                <select value={campaignId} onChange={(e) => setCampaignId(e.target.value)} style={{ maxWidth: 220 }}>
+                <select value={campaignId} onChange={(e) => updateUrl({ campaign: e.target.value })} style={{ maxWidth: 220 }}>
                   <option value="">ทุกแคมเปญ</option>
                   {campaigns.map((c) => (
                     <option key={c.id} value={c.id}>
@@ -174,17 +153,21 @@ export default function AdsDashboardPage() {
                   ))}
                 </select>
               )}
-              {campaignsStatus === "err" && <span className="hint warn">โหลดรายชื่อแคมเปญไม่ได้</span>}
-              <button className="btn small" onClick={syncNow} disabled={syncStatus === "syncing"} style={{ marginLeft: "auto" }}>
-                {syncStatus === "syncing" ? "กำลังซิงค์…" : "🔄 ซิงค์ข้อมูลล่าสุด"}
+              {campaignsQuery.isError && <span className="hint warn">{campaignsQuery.error.message}</span>}
+              <button className="btn small" onClick={() => syncMutation.mutate()} disabled={syncMutation.isPending} style={{ marginLeft: "auto" }}>
+                {syncMutation.isPending ? "กำลังซิงค์…" : "🔄 ซิงค์ข้อมูลล่าสุด"}
               </button>
             </div>
-            {syncStatus === "ok" && <div className="status-pill ok" style={{ marginBottom: 12 }}>{syncMsg}</div>}
-            {syncStatus === "err" && <div className="status-pill err" style={{ marginBottom: 12 }}>{syncMsg}</div>}
+            {syncMutation.isSuccess && (
+              <div className="status-pill ok" style={{ marginBottom: 12 }}>
+                ซิงค์แล้ว {syncMutation.data.upserted.snapshots} snapshot, {syncMutation.data.upserted.editEvents} เหตุการณ์แก้ไข
+              </div>
+            )}
+            {syncMutation.isError && <div className="status-pill err" style={{ marginBottom: 12 }}>{syncMutation.error.message}</div>}
 
-            {status === "loading" && <div className="hint">กำลังโหลดข้อมูล…</div>}
-            {status === "err" && <div className="hint warn">{msg}</div>}
-            {status === "ok" && (
+            {insightsQuery.isPending && <div className="hint">กำลังโหลดข้อมูล…</div>}
+            {insightsQuery.isError && <div className="hint warn">{insightsQuery.error.message}</div>}
+            {insightsQuery.isSuccess && (
               <>
                 <KpiStrip totals={totals} />
                 <div style={{ marginTop: 20, marginBottom: 20 }}>
@@ -209,5 +192,13 @@ export default function AdsDashboardPage() {
         )}
       </div>
     </>
+  );
+}
+
+export default function AdsDashboardPage() {
+  return (
+    <Suspense fallback={<div className="hint" style={{ padding: 40 }}>กำลังโหลด Dashboard…</div>}>
+      <AdsDashboardContent />
+    </Suspense>
   );
 }

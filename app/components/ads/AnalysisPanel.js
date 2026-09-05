@@ -1,11 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "../../lib/clientApi";
 
 const SEVERITY_PILL = { high: "status-pill err", medium: "status-pill pending", low: "status-pill ok" };
 const GOAL_STORAGE_KEY = "pipeline-studio:dailyOrderGoal";
 
 export default function AnalysisPanel({ campaigns }) {
+  const queryClient = useQueryClient();
   const [scope, setScope] = useState("account");
   const [campaignId, setCampaignId] = useState("");
   const [lookbackDays, setLookbackDays] = useState(7);
@@ -15,8 +18,6 @@ export default function AnalysisPanel({ campaigns }) {
   const [msg, setMsg] = useState("");
   const [result, setResult] = useState(null);
 
-  const [history, setHistory] = useState([]);
-  const [historyStatus, setHistoryStatus] = useState("loading");
   const [selected, setSelected] = useState(null);
   const [note, setNote] = useState("");
 
@@ -33,23 +34,30 @@ export default function AnalysisPanel({ campaigns }) {
     } catch {}
   }, [dailyOrderGoal]);
 
-  async function loadHistory() {
-    setHistoryStatus("loading");
+  const historyQuery = useQuery({
+    queryKey: ["ads", "analysis", "history", scope, campaignId],
+    queryFn: () => {
     const params = new URLSearchParams({ take: "20" });
     if (scope === "campaign" && campaignId) params.set("campaignId", campaignId);
-    try {
-      const res = await fetch(`/api/ads-analysis?${params.toString()}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "โหลดประวัติไม่สำเร็จ");
-      setHistory(data.analyses || []);
-      setHistoryStatus("ok");
-    } catch {
-      setHistory([]);
-      setHistoryStatus("err");
-    }
-  }
+      return fetchJson(`/api/ads-analysis?${params.toString()}`);
+    },
+    enabled: scope === "account" || Boolean(campaignId),
+  });
+  const history = historyQuery.data?.analyses || [];
 
-  useEffect(loadHistory, [scope, campaignId]);
+  const runMutation = useMutation({
+    mutationFn: (payload) =>
+      fetchJson("/api/ads-analysis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      setResult(data.analysis);
+      setSelected(null);
+      queryClient.invalidateQueries({ queryKey: ["ads", "analysis", "history"] });
+    },
+  });
 
   async function runAnalysis() {
     if (scope === "campaign" && !campaignId) {
@@ -61,21 +69,13 @@ export default function AnalysisPanel({ campaigns }) {
     setMsg("");
     setResult(null);
     try {
-      const res = await fetch("/api/ads-analysis", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      await runMutation.mutateAsync({
           scope,
           campaignId: scope === "campaign" ? campaignId : undefined,
           lookbackDays: Number(lookbackDays),
           dailyOrderGoal: Number(dailyOrderGoal),
-        }),
       });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "วิเคราะห์ไม่สำเร็จ");
-      setResult(data.analysis);
       setStatus("ok");
-      loadHistory();
     } catch (e) {
       setStatus("err");
       setMsg(String(e.message || e));
@@ -84,9 +84,10 @@ export default function AnalysisPanel({ campaigns }) {
 
   async function openHistoryItem(id) {
     try {
-      const res = await fetch(`/api/ads-analysis/${id}`);
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "เปิดผลวิเคราะห์ไม่สำเร็จ");
+      const data = await queryClient.fetchQuery({
+        queryKey: ["ads", "analysis", "detail", id],
+        queryFn: () => fetchJson(`/api/ads-analysis/${id}`),
+      });
       if (data.analysis) {
         setSelected(data.analysis);
         setResult(null);
@@ -100,16 +101,15 @@ export default function AnalysisPanel({ campaigns }) {
 
   async function saveNote(id, newStatus) {
     try {
-      const res = await fetch(`/api/ads-analysis/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userNote: note, ...(newStatus ? { status: newStatus } : {}) }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "บันทึกไม่สำเร็จ");
+      const data = await fetchJson(`/api/ads-analysis/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userNote: note, ...(newStatus ? { status: newStatus } : {}) }),
+        });
       setSelected(data.analysis);
       setStatus("ok");
-      loadHistory();
+      queryClient.setQueryData(["ads", "analysis", "detail", id], data);
+      queryClient.invalidateQueries({ queryKey: ["ads", "analysis", "history"] });
     } catch (e) {
       setStatus("err");
       setMsg(String(e.message || e));
@@ -168,8 +168,8 @@ export default function AnalysisPanel({ campaigns }) {
           />
           ออเดอร์/วัน
         </label>
-        <button className="btn small" onClick={runAnalysis} disabled={status === "running"}>
-          {status === "running" ? "กำลังวิเคราะห์…" : "🧠 วิเคราะห์ตอนนี้"}
+        <button className="btn small" onClick={runAnalysis} disabled={runMutation.isPending}>
+          {runMutation.isPending ? "กำลังวิเคราะห์…" : "🧠 วิเคราะห์ตอนนี้"}
         </button>
       </div>
 
@@ -253,9 +253,9 @@ export default function AnalysisPanel({ campaigns }) {
       )}
 
       <div className="field-label">ประวัติการวิเคราะห์</div>
-      {historyStatus === "loading" && <div className="hint">กำลังโหลด…</div>}
-      {historyStatus === "err" && <div className="hint warn">โหลดประวัติไม่ได้ — ยังไม่ได้ตั้งค่า DATABASE_URL หรือฐานข้อมูลไม่พร้อม</div>}
-      {historyStatus === "ok" && history.length === 0 && <div className="hint">ยังไม่มีประวัติการวิเคราะห์</div>}
+      {historyQuery.isPending && <div className="hint">กำลังโหลด…</div>}
+      {historyQuery.isError && <div className="hint warn">{historyQuery.error.message}</div>}
+      {historyQuery.isSuccess && history.length === 0 && <div className="hint">ยังไม่มีประวัติการวิเคราะห์</div>}
       <div className="flex flex-col gap-2" style={{ marginTop: 8 }}>
         {history.map((h) => (
           <button

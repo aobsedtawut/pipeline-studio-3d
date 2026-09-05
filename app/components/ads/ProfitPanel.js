@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "../../lib/clientApi";
 
 const EMPTY_COST = { productName: "", unitCostTHB: "", packagingShippingCostTHB: "0", codFeePercent: "0", sellingPriceTHB: "", notes: "" };
 
@@ -10,101 +12,73 @@ function fmt(n, decimals = 0) {
 }
 
 export default function ProfitPanel({ campaigns }) {
+  const queryClient = useQueryClient();
   const [campaignId, setCampaignId] = useState("");
   const [days, setDays] = useState(30);
   const [cost, setCost] = useState(EMPTY_COST);
-  const [costStatus, setCostStatus] = useState("idle");
-  const [saveStatus, setSaveStatus] = useState(null); // null | saving | ok | err
-  const [roi, setRoi] = useState(null);
-  const [roiStatus, setRoiStatus] = useState("idle"); // idle | loading | ok | err
-  const [ordersOverride, setOrdersOverride] = useState("");
-  const costRequest = useRef(0);
-  const roiRequest = useRef(0);
+  const [ordersDraft, setOrdersDraft] = useState("");
+  const [appliedOrdersOverride, setAppliedOrdersOverride] = useState(null);
 
   function selectCampaign(nextCampaignId) {
-    costRequest.current++;
-    roiRequest.current++;
     setCampaignId(nextCampaignId);
     setCost(EMPTY_COST);
-    setCostStatus(nextCampaignId ? "loading" : "idle");
-    setRoi(null);
-    setRoiStatus(nextCampaignId ? "loading" : "idle");
-    setOrdersOverride("");
-    setSaveStatus(null);
+    setOrdersDraft("");
+    setAppliedOrdersOverride(null);
   }
 
+  const costQuery = useQuery({
+    queryKey: ["ads", "product-cost", campaignId],
+    queryFn: () => fetchJson(`/api/product-costs/${campaignId}`),
+    enabled: Boolean(campaignId),
+  });
+
   useEffect(() => {
-    if (!campaignId) return;
-    const requestId = ++costRequest.current;
-    setCostStatus("loading");
-    fetch(`/api/product-costs/${campaignId}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok || data.error) throw new Error(data.error || "โหลดต้นทุนไม่สำเร็จ");
-        return data;
-      })
-      .then((d) => {
-        if (requestId !== costRequest.current) return;
-        if (d.productCost) {
+    if (costQuery.data) {
+      if (costQuery.data.productCost) {
+        const saved = costQuery.data.productCost;
           setCost({
-            productName: d.productCost.productName,
-            unitCostTHB: String(d.productCost.unitCostTHB),
-            packagingShippingCostTHB: String(d.productCost.packagingShippingCostTHB),
-            codFeePercent: String(d.productCost.codFeePercent),
-            sellingPriceTHB: String(d.productCost.sellingPriceTHB),
-            notes: d.productCost.notes || "",
+            productName: saved.productName,
+            unitCostTHB: String(saved.unitCostTHB),
+            packagingShippingCostTHB: String(saved.packagingShippingCostTHB),
+            codFeePercent: String(saved.codFeePercent),
+            sellingPriceTHB: String(saved.sellingPriceTHB),
+            notes: saved.notes || "",
           });
-        } else {
-          setCost(EMPTY_COST);
-        }
-        setCostStatus("ok");
-      })
-      .catch(() => {
-        if (requestId === costRequest.current) setCostStatus("err");
-      });
-  }, [campaignId]);
+      } else setCost(EMPTY_COST);
+    }
+  }, [costQuery.data]);
 
-  function loadRoi() {
-    if (!campaignId) return;
-    const requestId = ++roiRequest.current;
-    setRoiStatus("loading");
+  const roiQuery = useQuery({
+    queryKey: ["ads", "roi", campaignId, Number(days), appliedOrdersOverride],
+    queryFn: () => {
     const params = new URLSearchParams({ campaignId, days: String(days) });
-    if (ordersOverride !== "") params.set("ordersOverride", ordersOverride);
-    fetch(`/api/ads-roi?${params.toString()}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (requestId !== roiRequest.current) return;
-        if (!d.ok) throw new Error(d.error || "โหลดข้อมูลไม่สำเร็จ");
-        setRoi(d);
-        if (ordersOverride === "") setOrdersOverride(String(d.orders));
-        setRoiStatus("ok");
-      })
-      .catch(() => {
-        if (requestId === roiRequest.current) setRoiStatus("err");
-      });
-  }
+      if (appliedOrdersOverride !== null) params.set("ordersOverride", String(appliedOrdersOverride));
+      return fetchJson(`/api/ads-roi?${params.toString()}`);
+    },
+    enabled: Boolean(campaignId),
+  });
+  const roi = roiQuery.data || null;
 
   useEffect(() => {
-    loadRoi();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [campaignId, days]);
+    if (roi && appliedOrdersOverride === null) setOrdersDraft(String(roi.orders));
+  }, [roi, appliedOrdersOverride]);
+
+  const saveMutation = useMutation({
+    mutationFn: (payload) =>
+      fetchJson("/api/product-costs", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["ads", "product-cost", campaignId], { productCost: data.productCost });
+      queryClient.invalidateQueries({ queryKey: ["ads", "roi", campaignId] });
+    },
+  });
 
   async function saveCost() {
     if (!campaignId) return;
-    setSaveStatus("saving");
-    try {
-      const res = await fetch("/api/product-costs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId, ...cost }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) throw new Error(data.error || "บันทึกไม่สำเร็จ");
-      setSaveStatus("ok");
-      loadRoi();
-    } catch {
-      setSaveStatus("err");
-    }
+    saveMutation.mutate({ campaignId, ...cost });
   }
 
   return (
@@ -120,7 +94,17 @@ export default function ProfitPanel({ campaigns }) {
         </select>
         <label className="hint" style={{ display: "flex", alignItems: "center", gap: 6 }}>
           ช่วง
-          <input type="number" value={days} onChange={(e) => setDays(e.target.value)} style={{ width: 60 }} min={1} />
+          <input
+            type="number"
+            value={days}
+            onChange={(e) => {
+              setDays(e.target.value);
+              setOrdersDraft("");
+              setAppliedOrdersOverride(null);
+            }}
+            style={{ width: 60 }}
+            min={1}
+          />
           วัน
         </label>
       </div>
@@ -133,8 +117,8 @@ export default function ProfitPanel({ campaigns }) {
             <div className="scene-card-head">
               <span className="scene-badge">ต้นทุน/ราคาขาย</span>
             </div>
-            {costStatus === "loading" && <div className="hint" style={{ marginTop: 8 }}>กำลังโหลดต้นทุน…</div>}
-            {costStatus === "err" && <div className="hint warn" style={{ marginTop: 8 }}>โหลดข้อมูลต้นทุนไม่สำเร็จ</div>}
+            {costQuery.isPending && <div className="hint" style={{ marginTop: 8 }}>กำลังโหลดต้นทุน…</div>}
+            {costQuery.isError && <div className="hint warn" style={{ marginTop: 8 }}>{costQuery.error.message}</div>}
             <label className="field-label" style={{ marginTop: 10 }}>ชื่อสินค้า</label>
             <input type="text" value={cost.productName} onChange={(e) => setCost({ ...cost, productName: e.target.value })} />
             <div className="row" style={{ marginTop: 10 }}>
@@ -174,19 +158,17 @@ export default function ProfitPanel({ campaigns }) {
               </div>
             </div>
             <div style={{ marginTop: 12 }}>
-              <button className="btn small" onClick={saveCost} disabled={saveStatus === "saving"}>
-                {saveStatus === "saving" ? "กำลังบันทึก…" : "💾 บันทึกต้นทุน/ราคา"}
+              <button className="btn small" onClick={saveCost} disabled={saveMutation.isPending}>
+                {saveMutation.isPending ? "กำลังบันทึก…" : "💾 บันทึกต้นทุน/ราคา"}
               </button>
-              {saveStatus === "ok" && <span className="status-pill ok" style={{ marginLeft: 10 }}>บันทึกแล้ว</span>}
-              {saveStatus === "err" && <span className="status-pill err" style={{ marginLeft: 10 }}>บันทึกไม่สำเร็จ</span>}
+              {saveMutation.isSuccess && <span className="status-pill ok" style={{ marginLeft: 10 }}>บันทึกแล้ว</span>}
+              {saveMutation.isError && <span className="status-pill err" style={{ marginLeft: 10 }}>{saveMutation.error.message}</span>}
             </div>
           </div>
 
-          {roiStatus === "loading" && <div className="hint">กำลังคำนวณ…</div>}
-          {roiStatus === "err" && (
-            <div className="hint warn">ยังไม่ได้ตั้งค่า DATABASE_URL หรือดึงข้อมูลไม่สำเร็จ — ฟีเจอร์นี้ต้องมีฐานข้อมูลเสมอ</div>
-          )}
-          {roiStatus === "ok" && roi && (
+          {roiQuery.isPending && <div className="hint">กำลังคำนวณ…</div>}
+          {roiQuery.isError && <div className="hint warn">{roiQuery.error.message}</div>}
+          {roiQuery.isSuccess && roi && (
             <>
               <label className="field-label">
                 จำนวนออเดอร์จริง (ค่าเริ่มต้นดึงจาก "ผลลัพธ์" ของแอด ซึ่งคือจำนวนแชทที่เริ่มคุย ไม่ใช่ยอดขายจริง — แก้ไขให้ตรงได้)
@@ -194,11 +176,16 @@ export default function ProfitPanel({ campaigns }) {
               <div className="flex gap-2" style={{ alignItems: "center", marginBottom: 14 }}>
                 <input
                   type="number"
-                  value={ordersOverride}
-                  onChange={(e) => setOrdersOverride(e.target.value)}
+                  value={ordersDraft}
+                  onChange={(e) => setOrdersDraft(e.target.value)}
                   style={{ width: 100 }}
                 />
-                <button className="btn small secondary" onClick={loadRoi}>คำนวณใหม่</button>
+                <button
+                  className="btn small secondary"
+                  onClick={() => setAppliedOrdersOverride(ordersDraft === "" ? null : Number(ordersDraft))}
+                >
+                  คำนวณใหม่
+                </button>
               </div>
 
               {!roi.productCost && <div className="hint warn" style={{ marginBottom: 12 }}>ยังไม่ได้กรอกต้นทุน/ราคาขาย — แสดงได้แค่งบที่ใช้กับจำนวนออเดอร์เท่านั้น</div>}
