@@ -31,7 +31,7 @@ Requires Node 18+.
 
 The whole app is gated behind Google sign-in — every page and API route
 redirects to `/signin` unless you're signed in with an allowlisted Google
-account (enforced in [middleware.js](middleware.js) +
+account (enforced in [proxy.js](proxy.js) +
 [app/api/auth/[...nextauth]/route.js](app/api/auth/%5B...nextauth%5D/route.js)).
 
 1. Go to [Google Cloud Console → Credentials](https://console.cloud.google.com/apis/credentials), create an **OAuth client ID** (type: Web application).

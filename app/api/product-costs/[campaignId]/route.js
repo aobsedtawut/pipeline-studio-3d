@@ -4,7 +4,8 @@ const NUMERIC_FIELDS = ["unitCostTHB", "packagingShippingCostTHB", "codFeePercen
 
 export async function GET(req, { params }) {
   try {
-    const productCost = await prisma.productCost.findUnique({ where: { campaignId: params.campaignId } });
+    const { campaignId } = await params;
+    const productCost = await prisma.productCost.findUnique({ where: { campaignId } });
     return Response.json({ productCost: productCost || null });
   } catch (e) {
     return Response.json({ error: "อ่านข้อมูลต้นทุนไม่สำเร็จ: " + String(e.message || e) }, { status: 502 });
@@ -13,6 +14,7 @@ export async function GET(req, { params }) {
 
 export async function PATCH(req, { params }) {
   try {
+    const { campaignId } = await params;
     const body = await req.json();
     const data = {};
     for (const key of ["productName", "unitCostTHB", "packagingShippingCostTHB", "codFeePercent", "sellingPriceTHB", "notes"]) {
@@ -38,7 +40,7 @@ export async function PATCH(req, { params }) {
       data.productName = data.productName.trim();
     }
     if (data.notes !== undefined) data.notes = typeof data.notes === "string" ? data.notes.trim() || null : null;
-    const productCost = await prisma.productCost.update({ where: { campaignId: params.campaignId }, data });
+    const productCost = await prisma.productCost.update({ where: { campaignId }, data });
     return Response.json({ productCost });
   } catch (e) {
     return Response.json({ error: String(e.message || e) }, { status: e.code === "P2025" ? 404 : 502 });
@@ -47,7 +49,8 @@ export async function PATCH(req, { params }) {
 
 export async function DELETE(req, { params }) {
   try {
-    await prisma.productCost.delete({ where: { campaignId: params.campaignId } });
+    const { campaignId } = await params;
+    await prisma.productCost.delete({ where: { campaignId } });
     return Response.json({ ok: true });
   } catch (e) {
     return Response.json({ error: String(e.message || e) }, { status: e.code === "P2025" ? 404 : 502 });

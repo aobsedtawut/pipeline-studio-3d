@@ -4,7 +4,8 @@ const ANALYSIS_STATUSES = new Set(["generated", "reviewed", "applied", "dismisse
 
 export async function GET(req, { params }) {
   try {
-    const analysis = await prisma.adAnalysis.findUnique({ where: { id: params.id } });
+    const { id } = await params;
+    const analysis = await prisma.adAnalysis.findUnique({ where: { id } });
     return Response.json({ analysis: analysis || null });
   } catch (e) {
     return Response.json({ error: "อ่านผลวิเคราะห์ไม่สำเร็จ: " + String(e.message || e) }, { status: 502 });
@@ -13,6 +14,7 @@ export async function GET(req, { params }) {
 
 export async function PATCH(req, { params }) {
   try {
+    const { id } = await params;
     const { status, userNote } = await req.json();
     if (status !== undefined && !ANALYSIS_STATUSES.has(status)) {
       return Response.json({ error: "สถานะผลวิเคราะห์ไม่ถูกต้อง" }, { status: 400 });
@@ -21,7 +23,7 @@ export async function PATCH(req, { params }) {
       return Response.json({ error: "โน้ตต้องเป็นข้อความ" }, { status: 400 });
     }
     const analysis = await prisma.adAnalysis.update({
-      where: { id: params.id },
+      where: { id },
       data: {
         ...(status !== undefined ? { status } : {}),
         ...(userNote !== undefined ? { userNote: userNote.trim().slice(0, 5000) || null } : {}),

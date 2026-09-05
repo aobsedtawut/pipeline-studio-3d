@@ -1,4 +1,8 @@
-export { default } from "next-auth/middleware";
+import authMiddleware from "next-auth/middleware";
+
+export default function proxy(request) {
+  return authMiddleware(request);
+}
 
 // Everything requires a signed-in, allowlisted Google account except
 // NextAuth's own routes, the sign-in page (excluding /signin would
