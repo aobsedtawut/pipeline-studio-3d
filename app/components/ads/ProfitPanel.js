@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const EMPTY_COST = { productName: "", unitCostTHB: "", packagingShippingCostTHB: "0", codFeePercent: "0", sellingPriceTHB: "", notes: "" };
 
@@ -13,14 +13,20 @@ export default function ProfitPanel({ campaigns }) {
   const [campaignId, setCampaignId] = useState("");
   const [days, setDays] = useState(30);
   const [cost, setCost] = useState(EMPTY_COST);
+  const [costStatus, setCostStatus] = useState("idle");
   const [saveStatus, setSaveStatus] = useState(null); // null | saving | ok | err
   const [roi, setRoi] = useState(null);
   const [roiStatus, setRoiStatus] = useState("idle"); // idle | loading | ok | err
   const [ordersOverride, setOrdersOverride] = useState("");
+  const costRequest = useRef(0);
+  const roiRequest = useRef(0);
 
   function selectCampaign(nextCampaignId) {
+    costRequest.current++;
+    roiRequest.current++;
     setCampaignId(nextCampaignId);
     setCost(EMPTY_COST);
+    setCostStatus(nextCampaignId ? "loading" : "idle");
     setRoi(null);
     setRoiStatus(nextCampaignId ? "loading" : "idle");
     setOrdersOverride("");
@@ -29,9 +35,16 @@ export default function ProfitPanel({ campaigns }) {
 
   useEffect(() => {
     if (!campaignId) return;
+    const requestId = ++costRequest.current;
+    setCostStatus("loading");
     fetch(`/api/product-costs/${campaignId}`)
-      .then((r) => r.json())
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || "โหลดต้นทุนไม่สำเร็จ");
+        return data;
+      })
       .then((d) => {
+        if (requestId !== costRequest.current) return;
         if (d.productCost) {
           setCost({
             productName: d.productCost.productName,
@@ -44,23 +57,31 @@ export default function ProfitPanel({ campaigns }) {
         } else {
           setCost(EMPTY_COST);
         }
+        setCostStatus("ok");
+      })
+      .catch(() => {
+        if (requestId === costRequest.current) setCostStatus("err");
       });
   }, [campaignId]);
 
   function loadRoi() {
     if (!campaignId) return;
+    const requestId = ++roiRequest.current;
     setRoiStatus("loading");
     const params = new URLSearchParams({ campaignId, days: String(days) });
     if (ordersOverride !== "") params.set("ordersOverride", ordersOverride);
     fetch(`/api/ads-roi?${params.toString()}`)
       .then((r) => r.json())
       .then((d) => {
+        if (requestId !== roiRequest.current) return;
         if (!d.ok) throw new Error(d.error || "โหลดข้อมูลไม่สำเร็จ");
         setRoi(d);
         if (ordersOverride === "") setOrdersOverride(String(d.orders));
         setRoiStatus("ok");
       })
-      .catch(() => setRoiStatus("err"));
+      .catch(() => {
+        if (requestId === roiRequest.current) setRoiStatus("err");
+      });
   }
 
   useEffect(() => {
@@ -112,6 +133,8 @@ export default function ProfitPanel({ campaigns }) {
             <div className="scene-card-head">
               <span className="scene-badge">ต้นทุน/ราคาขาย</span>
             </div>
+            {costStatus === "loading" && <div className="hint" style={{ marginTop: 8 }}>กำลังโหลดต้นทุน…</div>}
+            {costStatus === "err" && <div className="hint warn" style={{ marginTop: 8 }}>โหลดข้อมูลต้นทุนไม่สำเร็จ</div>}
             <label className="field-label" style={{ marginTop: 10 }}>ชื่อสินค้า</label>
             <input type="text" value={cost.productName} onChange={(e) => setCost({ ...cost, productName: e.target.value })} />
             <div className="row" style={{ marginTop: 10 }}>

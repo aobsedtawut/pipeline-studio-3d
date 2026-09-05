@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Logo from "../../components/Logo";
 import Topbar from "../../components/Topbar";
 import KpiStrip from "../../components/ads/KpiStrip";
@@ -34,6 +34,7 @@ export default function AdsDashboardPage() {
   const [datePreset, setDatePreset] = useState("last_7d");
   const [campaignId, setCampaignId] = useState("");
   const [campaigns, setCampaigns] = useState([]);
+  const [campaignsStatus, setCampaignsStatus] = useState("loading");
 
   const [status, setStatus] = useState("loading"); // loading | ok | err
   const [msg, setMsg] = useState("");
@@ -42,8 +43,10 @@ export default function AdsDashboardPage() {
 
   const [syncStatus, setSyncStatus] = useState(null); // null | syncing | ok | err
   const [syncMsg, setSyncMsg] = useState("");
+  const insightsRequest = useRef(0);
 
   async function loadInsights() {
+    const requestId = ++insightsRequest.current;
     setStatus("loading");
     try {
       const params = new URLSearchParams({ level, datePreset });
@@ -51,16 +54,13 @@ export default function AdsDashboardPage() {
       const res = await fetch(`/api/ads-insights?${params.toString()}`);
       const data = await res.json();
       if (!res.ok || data.error) throw new Error(data.error || "ดึงข้อมูลไม่สำเร็จ");
+      if (requestId !== insightsRequest.current) return;
       setRows(data.rows || []);
       setTotals(data.totals || null);
       setStatus("ok");
 
-      if (level === "campaign") {
-        const distinct = new Map();
-        for (const r of data.rows || []) distinct.set(r.campaignId, r.campaignName);
-        setCampaigns([...distinct.entries()].map(([id, name]) => ({ id, name })));
-      }
     } catch (e) {
+      if (requestId !== insightsRequest.current) return;
       setStatus("err");
       setMsg(String(e.message || e));
     }
@@ -70,6 +70,29 @@ export default function AdsDashboardPage() {
     loadInsights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [level, datePreset, campaignId]);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/ads-campaigns")
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || data.error) throw new Error(data.error || "โหลดรายชื่อแคมเปญไม่สำเร็จ");
+        return data;
+      })
+      .then((data) => {
+        if (!active) return;
+        setCampaigns(data.campaigns || []);
+        setCampaignsStatus("ok");
+      })
+      .catch(() => {
+        if (!active) return;
+        setCampaigns([]);
+        setCampaignsStatus("err");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function syncNow() {
     setSyncStatus("syncing");
@@ -151,6 +174,7 @@ export default function AdsDashboardPage() {
                   ))}
                 </select>
               )}
+              {campaignsStatus === "err" && <span className="hint warn">โหลดรายชื่อแคมเปญไม่ได้</span>}
               <button className="btn small" onClick={syncNow} disabled={syncStatus === "syncing"} style={{ marginLeft: "auto" }}>
                 {syncStatus === "syncing" ? "กำลังซิงค์…" : "🔄 ซิงค์ข้อมูลล่าสุด"}
               </button>
