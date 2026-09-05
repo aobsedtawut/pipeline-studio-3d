@@ -83,24 +83,36 @@ export default function AnalysisPanel({ campaigns }) {
   }
 
   async function openHistoryItem(id) {
-    const res = await fetch(`/api/ads-analysis/${id}`);
-    const data = await res.json();
-    if (data.analysis) {
-      setSelected(data.analysis);
-      setNote(data.analysis.userNote || "");
+    try {
+      const res = await fetch(`/api/ads-analysis/${id}`);
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "เปิดผลวิเคราะห์ไม่สำเร็จ");
+      if (data.analysis) {
+        setSelected(data.analysis);
+        setResult(null);
+        setNote(data.analysis.userNote || "");
+      }
+    } catch (e) {
+      setStatus("err");
+      setMsg(String(e.message || e));
     }
   }
 
   async function saveNote(id, newStatus) {
-    const res = await fetch(`/api/ads-analysis/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userNote: note, ...(newStatus ? { status: newStatus } : {}) }),
-    });
-    const data = await res.json();
-    if (data.analysis) {
+    try {
+      const res = await fetch(`/api/ads-analysis/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userNote: note, ...(newStatus ? { status: newStatus } : {}) }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) throw new Error(data.error || "บันทึกไม่สำเร็จ");
       setSelected(data.analysis);
+      setStatus("ok");
       loadHistory();
+    } catch (e) {
+      setStatus("err");
+      setMsg(String(e.message || e));
     }
   }
 

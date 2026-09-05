@@ -4,8 +4,8 @@ export async function GET() {
   try {
     const productCosts = await prisma.productCost.findMany({ orderBy: { updatedAt: "desc" } });
     return Response.json({ productCosts });
-  } catch {
-    return Response.json({ productCosts: [] });
+  } catch (e) {
+    return Response.json({ error: "อ่านข้อมูลต้นทุนไม่สำเร็จ: " + String(e.message || e) }, { status: 502 });
   }
 }
 
@@ -18,29 +18,43 @@ export async function POST(request) {
   } catch {}
   const { campaignId, productName, unitCostTHB, packagingShippingCostTHB, codFeePercent, sellingPriceTHB, notes } = body;
 
-  if (!campaignId || !productName || unitCostTHB === undefined || sellingPriceTHB === undefined) {
+  if (typeof campaignId !== "string" || typeof productName !== "string" || !campaignId.trim() || !productName.trim() || unitCostTHB === undefined || sellingPriceTHB === undefined) {
     return Response.json({ error: "ต้องระบุ campaignId, productName, unitCostTHB, sellingPriceTHB" }, { status: 400 });
   }
 
+  const values = {
+    unitCostTHB: Number(unitCostTHB),
+    packagingShippingCostTHB: packagingShippingCostTHB === undefined || packagingShippingCostTHB === "" ? 0 : Number(packagingShippingCostTHB),
+    codFeePercent: codFeePercent === undefined || codFeePercent === "" ? 0 : Number(codFeePercent),
+    sellingPriceTHB: Number(sellingPriceTHB),
+  };
+  if (
+    !Object.values(values).every(Number.isFinite) ||
+    values.unitCostTHB < 0 ||
+    values.packagingShippingCostTHB < 0 ||
+    values.codFeePercent < 0 ||
+    values.codFeePercent > 100 ||
+    values.sellingPriceTHB <= 0
+  ) {
+    return Response.json({ error: "กรอกต้นทุน/ราคาเป็นตัวเลขที่ถูกต้อง และค่าธรรมเนียม COD ระหว่าง 0–100%" }, { status: 400 });
+  }
+
+  const cleanCampaignId = campaignId.trim();
+  const cleanProductName = productName.trim();
+
   try {
     const productCost = await prisma.productCost.upsert({
-      where: { campaignId },
+      where: { campaignId: cleanCampaignId },
       create: {
-        campaignId,
-        productName,
-        unitCostTHB: Number(unitCostTHB),
-        packagingShippingCostTHB: Number(packagingShippingCostTHB) || 0,
-        codFeePercent: Number(codFeePercent) || 0,
-        sellingPriceTHB: Number(sellingPriceTHB),
-        notes: notes || null,
+        campaignId: cleanCampaignId,
+        productName: cleanProductName,
+        ...values,
+        notes: notes ? String(notes).trim() : null,
       },
       update: {
-        productName,
-        unitCostTHB: Number(unitCostTHB),
-        packagingShippingCostTHB: Number(packagingShippingCostTHB) || 0,
-        codFeePercent: Number(codFeePercent) || 0,
-        sellingPriceTHB: Number(sellingPriceTHB),
-        notes: notes || null,
+        productName: cleanProductName,
+        ...values,
+        notes: notes ? String(notes).trim() : null,
       },
     });
     return Response.json({ productCost });

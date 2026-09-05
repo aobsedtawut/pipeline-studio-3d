@@ -11,8 +11,11 @@ function dayKey(dateStr) {
 // (adId -> format string) is only meaningful for level:"ad" rows.
 export async function upsertAdSnapshots(rows, level, creativeFormatMap) {
   let count = 0;
-  await Promise.all(
-    rows.map(async (r) => {
+  const batchSize = 25;
+  for (let start = 0; start < rows.length; start += batchSize) {
+    const batch = rows.slice(start, start + batchSize);
+    await Promise.all(
+      batch.map(async (r) => {
       const entityId = entityIdForLevel(r, level);
       if (!entityId) return;
       const creativeFormat = level === "ad" && creativeFormatMap ? creativeFormatMap.get(r.adId) || null : null;
@@ -62,7 +65,8 @@ export async function upsertAdSnapshots(rows, level, creativeFormatMap) {
         },
       });
       count++;
-    })
-  );
+      })
+    );
+  }
   return count;
 }

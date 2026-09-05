@@ -6,11 +6,15 @@
 // block instead of an error boundary.
 import { prisma } from "../../lib/db";
 
+const LEVELS = new Set(["campaign", "adset", "ad"]);
+
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
-  const level = searchParams.get("level") || "campaign";
+  const requestedLevel = searchParams.get("level");
+  const level = LEVELS.has(requestedLevel) ? requestedLevel : "campaign";
   const campaignId = searchParams.get("campaignId") || null;
-  const days = Number(searchParams.get("days")) > 0 ? Number(searchParams.get("days")) : 30;
+  const requestedDays = Number(searchParams.get("days"));
+  const days = Number.isFinite(requestedDays) && requestedDays > 0 ? Math.min(Math.floor(requestedDays), 365) : 30;
 
   const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
@@ -26,10 +30,13 @@ export async function GET(request) {
     });
     return Response.json({ ok: true, snapshots });
   } catch (e) {
-    return Response.json({
-      ok: false,
-      error: "ยังไม่ได้ตั้งค่า DATABASE_URL — ดูเทรนด์ย้อนหลังไม่ได้ (ข้อมูลสดยังใช้งานได้ที่แท็บอื่น)",
-      snapshots: [],
-    });
+    return Response.json(
+      {
+        ok: false,
+        error: "อ่านข้อมูลย้อนหลังไม่สำเร็จ — ตรวจสอบ DATABASE_URL และสถานะฐานข้อมูล",
+        snapshots: [],
+      },
+      { status: 502 }
+    );
   }
 }
